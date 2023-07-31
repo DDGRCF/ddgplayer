@@ -1,6 +1,7 @@
 #ifndef DDGPLAYER_FFPLAYER_H_
 #define DDGPLAYER_FFPLAYER_H_
 
+#include <stdint.h>
 /* 
  * @brief 初始化参数
  */
@@ -43,5 +44,17 @@ typedef struct {
   int swscale_type; // w ffrender图像swscale需要用到的类型
 } PlayerInitParams;
 
+
+typedef struct {
+  PlayerInitParams* init_params;
+  int64_t start_time;
+  int64_t start_tick; // TODO: ?
+  int64_t start_pts;
+  int64_t apts; // current apts
+  int64_t vpts; // current vpts
+  int apktn; // available audio packet number in pktqueue
+  int vkptn; // available video packet number in pktqueue
+  void* winmsg;
+} CommonVars;
 
 #endif

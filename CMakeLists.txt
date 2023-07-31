@@ -9,8 +9,11 @@ set(CMAKE_CXX_FLAGS
     "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -std=c++11 -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
 )
 set(CMAKE_C_FLAGS
-    "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -std=c11 -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
+  "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -std=c11 -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
 )
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L${FFMPEG_DIR}/lib -I${FFMPEG_DIR}/include")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -L${FFMPEG_DIR}/lib -I${FFMPEG_DIR}/include")
@@ -21,7 +24,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED ${LIB_SRC})
 
 target_link_libraries(${CMAKE_PROJECT_NAME} 
   -Wl,--start-group 
-  avformat avcodec avfilter avutil swresample swscale 
+  avformat avcodec avfilter avutil swresample swscale avdevice
   -Wl,--end-group)
 aux_source_directory(tests TEST_SRC)
 
