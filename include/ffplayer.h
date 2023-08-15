@@ -2,6 +2,16 @@
 #define DDGPLAYER_FFPLAYER_H_
 
 #include <stdint.h>
+
+#include <libavformat/avformat.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// fourc表示
+#define MSG_VIDEO_RESIZED (('S' << 24) | ('I' << 16) | ('Z' << 8) | ('E' << 0))
+
 /* 
  * @brief 初始化参数
  */
@@ -34,7 +44,7 @@ typedef struct {
 
   int init_timeout; // w 播放器初始化超时时间，用来防止卡死网络流媒体
   int open_autoplay; // w 播放器打开后自动播放，不需要手动设置 MSG
-  int auto_reconnect; // w 流媒体超时重连时间
+  int auto_reconnect; // w 流媒体超时重连时间(毫秒)
   int rtsp_transport; // w rtsp传输模式，0 - 自动，1 - udp, 2 - tcp
   int avts_syncmode; // w 音视频时间戳同步模式， 0 - 自动，2 - 直播模式，3 - 直播模式
   char filter_string[256]; // w 自定义的video filter string(滤镜)
@@ -53,8 +63,24 @@ typedef struct {
   int64_t apts; // current apts
   int64_t vpts; // current vpts
   int apktn; // available audio packet number in pktqueue
-  int vkptn; // available video packet number in pktqueue
+  int vpktn; // available video packet number in pktqueue
   void* winmsg;
 } CommonVars;
+
+void* player_open(char* file, void* win, PlayerInitParams* params);
+
+void player_close(void* ctxt);
+
+void* av_demux_thread_proc(void* ctxt);
+
+void* audio_decode_thread_proc(void* ctxt);
+
+void* video_decode_thread_proc(void* ctxt);
+
+void player_load_params(PlayerInitParams* params, char* str);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

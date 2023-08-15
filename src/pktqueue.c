@@ -3,10 +3,12 @@
 #include <pthread.h>
 #include <time.h>
 
+// 一定要是2 ^ n 的形式
 #ifndef DEF_PKT_QUEUE_SIZE
 #define DEF_PKT_QUEUE_SIZE 256
 #endif
 
+// request和release的time wait(s)
 
 typedef struct {
   int fsize; // TODO:
@@ -22,9 +24,8 @@ typedef struct {
   int vhead;
   int vtail;
 
-  #define TS_STOP (1 << 0)
-  #define TS_START (1 << 1)
-
+#define TS_STOP (1 << 0)
+#define TS_START (1 << 1)
   int status;
 
   AVPacket* bpkts; // packet buffers
@@ -66,6 +67,10 @@ void* pktqueue_create(int size, CommonVars* cmnvars) {
   return ppq;
 }
 
+/*
+ * @brief 消减队列(unref)
+ * @return
+ */
 void pktqueue_destroy(void* ctxt) {
   PktQueue* ppq = (PktQueue*)ctxt;
   int i;
@@ -91,7 +96,7 @@ void pktqueue_reset(void* ctxt) {
     ppq->vpkts[i] = NULL;
   }
   // TODO: ?
-  ppq->fncur = ppq->asize;
+  ppq->fncur = ppq->asize; // TODO: ?
   ppq->ancur = ppq->vncur = 0;
   ppq->fhead = ppq->ftail = 0;
   ppq->ahead = ppq->atail = 0;
@@ -115,10 +120,14 @@ AVPacket* pktqueue_request_packet(void* ctxt) {
     av_log(NULL, AV_LOG_ERROR, "failed to get current time!\n");
     exit(-1);
   }
-  // 过期时间是当前时间 + 0.1秒
-  ts.tv_nsec += 100 * 1000 * 100;
-  ts.tv_sec += ts.tv_nsec / 1000000000;
-  ts.tv_nsec %= 1000000000;
+
+#define TS_NSEC 1000000000
+  // 过期时间是当前时间 + 0.01秒
+  ts.tv_nsec += TS_NSEC * 0.01;
+  ts.tv_sec += ts.tv_nsec / TS_NSEC;
+  ts.tv_nsec %= TS_NSEC;
+#undef TS_NSEC 
+
 
   pthread_mutex_lock(&ppq->lock);
   while (ppq->fncur == 0 && (ppq->status & TS_STOP) == 0 && ret != ETIMEDOUT) {
@@ -145,10 +154,12 @@ void pktqueue_release_packet(void* ctxt, AVPacket* pkt) {
     av_log(NULL, AV_LOG_ERROR, "failed to get current time!\n");
     exit(-1);
   }
-  // 过期时间是当前时间 + 0.1秒
-  ts.tv_nsec += 100 * 1000 * 100;
-  ts.tv_sec += ts.tv_nsec / 1000000000;
-  ts.tv_nsec %= 1000000000;
+#define TS_NSEC 1000000000
+  // 过期时间是当前时间 + 0.01秒
+  ts.tv_nsec += TS_NSEC * 0.01;
+  ts.tv_sec += ts.tv_nsec / TS_NSEC;
+  ts.tv_nsec %= TS_NSEC;
+#undef TS_NSEC 
 
   pthread_mutex_lock(&ppq->lock);
   while (ppq->fncur == ppq->fsize && (ppq->status & TS_STOP) == 0 && ret != ETIMEDOUT) {
@@ -161,4 +172,112 @@ void pktqueue_release_packet(void* ctxt, AVPacket* pkt) {
   } 
 
   pthread_mutex_unlock(&ppq->lock);
+}
+
+void pktqueue_audio_enqueue(void* ctxt, AVPacket* pkt) {
+  PktQueue* ppq = (PktQueue*)ctxt;
+
+  pthread_mutex_lock(&ppq->lock);
+  while (ppq->ancur == ppq->asize && (ppq->status & TS_STOP) == 0) {
+    pthread_cond_wait(&ppq->cond, &ppq->lock);
+  }
+  
+  if (ppq->ancur != ppq->asize) {
+    ppq->ancur++;
+    ppq->apkts[ppq->atail++ & (ppq->asize - 1)] = pkt;
+    pthread_cond_signal(&ppq->cond);
+    ppq->cmnvars->apktn = ppq->ancur;
+    av_log(NULL, AV_LOG_INFO, "akptn: %d\n", ppq->cmnvars->apktn);
+  }
+  pthread_mutex_unlock(&ppq->lock);
+}
+
+AVPacket* pktqueue_audio_dequeue(void* ctxt) {
+  PktQueue* ppq = (PktQueue*)ctxt;
+  AVPacket* pkt = NULL;
+  struct timespec ts;
+  int ret = 0;
+
+  ret = clock_gettime(CLOCK_REALTIME, &ts);
+  if (ret == -1) {
+    av_log(NULL, AV_LOG_ERROR, "failed to get current time!\n");
+    exit(-1);
+  }
+
+#define TS_NSEC 1000000000
+  // 过期时间是当前时间 + 0.01秒
+  ts.tv_nsec += TS_NSEC * 0.1;
+  ts.tv_sec += ts.tv_nsec / TS_NSEC;
+  ts.tv_nsec %= TS_NSEC;
+#undef TS_NSEC 
+
+  pthread_mutex_lock(&ppq->lock);
+  while (ppq->ancur == 0 && (ppq->status & TS_STOP) == 0) {
+    pthread_cond_timedwait(&ppq->cond, &ppq->lock, &ts);
+  }
+
+  if (ppq->ancur != 0) {
+    ppq->ancur--;
+    pkt = ppq->apkts[ppq->ahead++ & (ppq->asize - 1)];
+    pthread_cond_signal(&ppq->cond);
+    ppq->cmnvars->apktn = ppq->ancur;
+    av_log(NULL, AV_LOG_INFO, "akptn: %d\n", ppq->cmnvars->apktn);
+  }
+  
+  pthread_mutex_unlock(&ppq->lock);
+  return pkt; 
+}
+
+void pktqueue_video_enqueue(void* ctxt, AVPacket* pkt) {
+  PktQueue* ppq = (PktQueue*)ctxt;
+  pthread_mutex_lock(&ppq->lock);
+  while (ppq->vncur == ppq->vsize && (ppq->status & TS_STOP) == 0) {
+    pthread_cond_wait(&ppq->cond, &ppq->lock);
+  }
+
+  if (ppq->vncur != ppq->vsize) {
+    ppq->vncur++;
+    ppq->vpkts[ppq->vtail++ & (ppq->vsize - 1)] = pkt;    
+    pthread_cond_signal(&ppq->cond);
+    av_log(NULL, AV_LOG_INFO, "vkptn: %d\n", ppq->cmnvars->vpktn);
+  }
+
+  pthread_mutex_unlock(&ppq->lock);
+}
+
+
+AVPacket* pktqueue_video_dequeue(void* ctxt) {
+  PktQueue* ppq = (PktQueue*)ctxt;
+  AVPacket* pkt = NULL;
+  struct timespec ts;
+  int ret = 0;
+
+  ret = clock_gettime(CLOCK_REALTIME, &ts);
+  if (ret == -1) {
+    av_log(NULL, AV_LOG_ERROR, "failed to get current time!\n");
+    exit(-1);
+  }
+
+#define TS_NSEC 1000000000
+  // 过期时间是当前时间 + 0.01秒
+  ts.tv_nsec += TS_NSEC * 0.1;
+  ts.tv_sec += ts.tv_nsec / TS_NSEC;
+  ts.tv_nsec %= TS_NSEC;
+#undef TS_NSEC 
+
+  pthread_mutex_lock(&ppq->lock);
+  while (ppq->vncur == 0 && (ppq->status & TS_STOP) == 0) {
+    pthread_cond_timedwait(&ppq->cond, &ppq->lock, &ts);
+  }
+
+  if (ppq->vncur != 0) {
+    ppq->vncur--;
+    pkt = ppq->apkts[ppq->vhead++ & (ppq->vsize - 1)];
+    pthread_cond_signal(&ppq->cond);
+    ppq->cmnvars->vpktn = ppq->vncur;
+    av_log(NULL, AV_LOG_INFO, "vkptn: %d\n", ppq->cmnvars->vpktn);
+  }
+  
+  pthread_mutex_unlock(&ppq->lock);
+  return pkt; 
 }
