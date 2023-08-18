@@ -18,6 +18,7 @@ void render_audio(void* hrender, struct AVFrame* audio);
 
 void render_video(void* hrender, struct AVFrame* video);
 
+
 void render_pause(void* hrender, int pause);
 
 void render_setrect(void* hrender, int type, int x, int y, int w, int h);

@@ -5,12 +5,113 @@
 
 #include <libavformat/avformat.h>
 
+#define DDGPLAYER_VERSION "v1.0.0"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // fourc表示
-#define MSG_VIDEO_RESIZED (('S' << 24) | ('I' << 16) | ('Z' << 8) | ('E' << 0))
+#define MSG_OPEN_DONE          (('O' << 24) | ('P' << 16) | ('E' << 8) | ('N' << 0))
+#define MSG_OPEN_FAILED        (('F' << 24) | ('A' << 16) | ('I' << 8) | ('L' << 0))
+#define MSG_PLAY_COMPLETED     (('E' << 24) | ('N' << 16) | ('D' << 8) | (' ' << 0))
+#define MSG_TASK_SHAPSHOT      (('S' << 24) | ('N' << 16) | ('A' << 8) | ('P' << 0))
+#define MSG_STREAM_CONNECTED   (('C' << 24) | ('N' << 16) | ('C' << 8) | ('T' << 0))
+#define MSG_STREAM_DISCONNECT  (('D' << 24) | ('I' << 16) | ('S' << 8) | ('C' << 0))
+#define MSG_VIDEO_RESIZED      (('S' << 24) | ('I' << 16) | ('Z' << 8) | ('E' << 0))
+
+enum {
+  ADEV_RENDER_TYPE_WAVEOUT,  
+  ADEV_RENDER_TYPE_MAX_NUM,
+};
+
+enum {
+  VDEV_RENDER_TYPE_MAX_NUM,
+};
+
+enum {
+  VIDEO_MODE_LETTERBOX, // 长宽比不变
+  VIDEO_MODE_STRETCHED,
+  VIDEO_MODE_MAX_NUM,
+};
+
+enum {
+  VISUAL_EFFECT_DISABLE,
+  VISUAL_EFFECT_WAVEFORM,
+  VISUAL_EFFECT_SPECTRUM,
+  VISUAL_EFFECT_MAX_NUM,
+};
+
+enum {
+  SEEK_STEP_FORWARD = 1,
+  SEEK_STEP_BACKWARD,
+};
+
+enum {
+  // duration & position
+  PARAM_MEDIA_DURATION = 0x1000,
+  PARAM_MEDIA_POSITION,
+
+  // media detail info
+  PARAM_VIDEO_WIDTH,
+  PARAM_VIDEO_HEIGHT,
+
+  // video display mode
+  PARAM_VIDEO_MODE,
+
+  // audio volume control
+  PARAM_AUDIO_VOLUME,
+
+  // playback speed control
+  PARAM_PLAY_SPEED_VALUE,
+  PARAM_PLAY_SPEED_TYPE,
+
+  // visual effect mode
+  PARAM_VISUAL_EFFECT,
+
+  // audio/video sync diff
+  PARAM_AVSYNC_TIME_DIFF,
+
+  // get player init params
+  PARAM_PLAYER_INIT_PARAMS,
+
+  // definition evaluation
+  PARAM_DEFINITION_VALUE,
+
+  PARAM_DATARATE_VALUE,
+  PARAM_OBJECT_DETECT,
+  //-- public
+
+  //++ for adev
+  PARAM_ADEV_GET_CONTEXT = 0x2000,
+  //-- for adev
+
+  //++ for vdev
+  PARAM_VDEV_GET_CONTEXT = 0x3000,
+  PARAM_VDEV_POST_SURFACE,
+  PARAM_VDEV_GET_D3DDEV,
+  PARAM_VDEV_D3D_ROTATE,
+  PARAM_VDEV_GET_OVERLAY_HDC,
+  PARAM_VDEV_SET_OVERLAY_RECT,
+  PARAM_VDEV_GET_VRECT,
+  PARAM_VDEV_SET_BBOX,
+  //-- for vdev
+
+  //++ for render
+  PARAM_RENDER_GET_CONTEXT = 0x4000,
+  PARAM_RENDER_STEPFORWARD,
+  PARAM_RENDER_VDEV_WIN,
+  PARAM_RENDER_SOURCE_RECT,
+  //-- for render
+};
+
+enum {
+  AVSYNC_MODE_AUTO,  // 自动
+  AVSYNC_MODE_FILE,  // 文件播放模式
+  AVSYNC_MODE_LIVE_SYNC0, // 直播模式，放弃音视频同步
+  AVSYNC_MODE_LIVE_SYNC1, // 直播模式，做音视频同步
+};
+
 
 /* 
  * @brief 初始化参数

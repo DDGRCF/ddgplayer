@@ -12,8 +12,9 @@ extern "C" {
 
 #define VDEV_CLOSE     (1 << 0)
 #define VDEV_COMPLETED (1 << 1)
-#define VDEV_CLEAR     (1 << 2)
+#define VDEV_CLEAR     (1 << 2) // 清除数据
 
+// rrect 渲染的矩形框 vrect 视频数据的矩形框
 #define VDEV_COMMON_MEMBERS  \
     int bufnum;              \
     int pixfmt;              \
