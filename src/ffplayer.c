@@ -34,7 +34,6 @@ typedef struct {
   int32_t astream_index;
   AVRational astream_timebase;
   AVFrame aframe;
-
   // video
   AVCodecContext* vcodec_context;
   int32_t vstream_index;
@@ -82,10 +81,10 @@ typedef struct {
   // player init timeout, and init params
   int64_t read_timelast; // 上一次读取的时间，主要用于音视频同步(微秒)
   int64_t read_timeout;         // 读取是否超时
-  PlayerInitParams init_params; // us
+  PlayerInitParams init_params; // 播放器参数
 
-  // save url
-  char url[PATH_MAX];
+  // path to play
+  char url[PATH_MAX]; // 要播放的路径
 
   // recoder used for recording
   void* recorder;
@@ -111,7 +110,7 @@ static void avlog_callback(void* ptr, int level, const char* fmt, va_list vl) {
  * @brief  中断的回调函数，avformat_open_input的操作是阻塞操作，如果不加以控制那么等待时间会达到30s以上
  * @return 产生错误
  * @ref https://www.cnblogs.com/shuiche/p/11983533.html
-**/
+ */
 static int interrupt_callback(void* param) {
   Player* player = (Player*)param;
   if (player->read_timeout == -1) {
@@ -123,8 +122,11 @@ static int interrupt_callback(void* param) {
 }
 
 /**
- * @brief 获得指定的type的MediaType的总数
-**/
+ * @brief 获得指定的type的流的总数
+ * @param player: 播放器上下文
+ * @param type: 指定的流的类型
+ * @return 指定类型流的总数
+ */
 static int get_stream_total(Player* player, enum AVMediaType type) {
   int total = 0, i;
   for (i = 0; i < (int)player->avformat_context->nb_streams; i++) {
@@ -136,9 +138,11 @@ static int get_stream_total(Player* player, enum AVMediaType type) {
 }
 
 /**
- * @brief 除了当前的astream外，context上还有多少流数据
+ * @brief 对于指定的流类型，除了当前的stream外，context上还有多少的type流
+ * @param player: 播放器上下文
+ * @param type: 指定的流的类型
  * @return 返回除了当前的astream上外，context上面还有多少数据流
- **/
+ */
 static int get_stream_current(Player* player, enum AVMediaType type) {
   int idx, cur, i;
   switch (type) {
@@ -163,7 +167,12 @@ static int get_stream_current(Player* player, enum AVMediaType type) {
   return cur;
 }
 
-// https://www.cnblogs.com/leisure_chn/p/10429145.htmlq:w
+/** 
+ * @url https://www.cnblogs.com/leisure_chn/p/10429145.html 
+ * @brief 初始化过滤器的图
+ * @param player: 播放器上下文
+ * @return 空
+ */
 static void vfilter_graph_init(Player* player) {
   const AVFilter* filter_src = avfilter_get_by_name("buffer");
   const AVFilter* filter_sink = avfilter_get_by_name("buffersink");
@@ -405,9 +414,13 @@ static int init_stream(Player* player, enum AVMediaType type, int sel) {
   return 0;
 }
 
-/*
+/**
  * @brief 解析输入数据，解析的数据数据为下面的格式: 
  *      [key1 =(空格,:) value1;(,) key2 =(空格,:) value2;(,) key3 =(空格,:) value3 ...]
+ * @param str: 要解析的字符串
+ * @param key: 要解析的键
+ * @param val：键值所对应的默认值
+ * @param len: 字符串长度
  * @return 返回解析后的数据
  */
 static char* parse_params(const char* str, const char* key, char* val,
@@ -504,7 +517,7 @@ static int player_prepare_or_free(Player* player, int prepare) {
   }
   if (player->init_params.video_frame_rate != 0) {
     char frate[64];
-    sprintf(frate, "%d", player->init_params.video_frame_rate);
+    snprintf(frate, sizeof(frate), "%d", player->init_params.video_frame_rate);
     av_dict_set(&opts, "framerate", frate, 0);
   }
 
