@@ -114,7 +114,7 @@ enum {
   AVSYNC_MODE_LIVE_SYNC1, // 直播模式，做音视频同步
 };
 
-/* 
+/**
  * @brief 初始化参数
  */
 typedef struct {
@@ -157,7 +157,7 @@ typedef struct {
 } PlayerInitParams;
 
 typedef struct {
-  PlayerInitParams* init_params;
+  PlayerInitParams *init_params;
   int64_t start_time; // ms
   int64_t start_tick; // TODO: ?
   int64_t start_pts;
@@ -165,7 +165,7 @@ typedef struct {
   int64_t vpts; // current vpts
   int apktn;    // available audio packet number in pktqueue
   int vpktn;    // available video packet number in pktqueue
-  void* winmsg;
+  void *winmsg;
 } CommonVars;
 
 extern const int FF_TIME_MS;
@@ -174,23 +174,23 @@ extern const AVRational FF_TIME_BASE_Q;
 
 extern const AVRational FF_FREQUENCY_Q;
 
-void* player_open(char* file, void* win, PlayerInitParams* params);
-void player_close(void* ctxt);
-void player_play(void* hplayer);
-void player_pause(void* hplayer);
-void player_seek(void* hplayer, int64_t ms, int type);
-void player_setrect(void* hplayer, int type, int x, int y, int w, int h);
-int player_snapshot(void* hplayer, char* file, int w, int h, int wait_time);
-int player_record(void* hplayer, char* file);
-void player_setparam(void* hplayer, int id, void* param);
-void player_getparam(void* hplayer, int id, void* param);
+void *player_open(char *file, void *win, PlayerInitParams *params);
+void player_close(void *ctxt);
+void player_play(void *hplayer);
+void player_pause(void *hplayer);
+void player_seek(void *hplayer, int64_t ms, int type);
+void player_setrect(void *hplayer, int type, int x, int y, int w, int h);
+int player_snapshot(void *hplayer, char *file, int w, int h, int wait_time);
+int player_record(void *hplayer, char *file);
+void player_setparam(void *hplayer, int id, void *param);
+void player_getparam(void *hplayer, int id, void *param);
 
-void* av_demux_thread_proc(void* ctxt);
-void* audio_decode_thread_proc(void* ctxt);
-void* video_decode_thread_proc(void* ctxt);
+void *av_demux_thread_proc(void *ctxt);
+void *audio_decode_thread_proc(void *ctxt);
+void *video_decode_thread_proc(void *ctxt);
 
-void player_send_message(void* extra, int32_t msg, void* param);
-void player_load_params(PlayerInitParams* params, char* str);
+void player_send_message(void *extra, int32_t msg, void *param);
+void player_load_params(PlayerInitParams *params, char *str);
 
 #ifdef __cplusplus
 }

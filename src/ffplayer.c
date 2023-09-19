@@ -27,29 +27,30 @@
 
 typedef struct {
   // muxer format
-  AVFormatContext* avformat_context;
+  AVFormatContext *avformat_context;
 
   // audio
-  AVCodecContext* acodec_context;
+  AVCodecContext *acodec_context;
   int32_t astream_index;
   AVRational astream_timebase;
   AVFrame aframe;
+
   // video
-  AVCodecContext* vcodec_context;
-  int32_t vstream_index;
-  AVRational vstream_timebase; // 时间单位
-  AVFrame vframe;
-  AVRational vfrate;
+  AVCodecContext *vcodec_context; // 视频的上下文
+  int32_t vstream_index;          // 视频的索引
+  AVRational vstream_timebase;    // 视频的时间单位
+  AVFrame vframe;                 // 提取到的视频帧，用于渲染
+  AVRational vfrate;              // 视频的帧率
 
   // queue
-  void* pktqueue; // 队列
-  void* render;   // 渲染器
-  void* datarate; // 码率
+  void *pktqueue; // 队列
+  void *render;   // 渲染器
+  void *datarate; // 码率
 
 // thread status
-#define PS_A_PAUSE   (1 << 0) // audio decoding pause
-#define PS_V_PAUSE   (1 << 1) // video decoding pause
-#define PS_R_PAUSE   (1 << 2) // render pause
+#define PS_A_PAUSE   (1 << 0) // 音频暂停解码
+#define PS_V_PAUSE   (1 << 1) // 视频暂停解码
+#define PS_R_PAUSE   (1 << 2) // 渲染器暂停
 #define PS_F_SEEK    (1 << 3)
 #define PS_A_SEEK    (1 << 4)
 #define PS_V_SEEK    (1 << 5)
@@ -66,7 +67,7 @@ typedef struct {
   int seek_diff;
   int seek_sidx; // TODO:
 
-  // player common vars
+  // player configuration
   CommonVars cmnvars;
 
   pthread_mutex_t lock;
@@ -74,9 +75,9 @@ typedef struct {
   pthread_t adecode_thread;
   pthread_t vdecode_thread;
 
-  AVFilterGraph* vfilter_graph;
-  AVFilterContext* vfilter_src_ctx;
-  AVFilterContext* vfilter_sink_ctx;
+  AVFilterGraph *vfilter_graph;
+  AVFilterContext *vfilter_src_ctx;
+  AVFilterContext *vfilter_sink_ctx;
 
   // player init timeout, and init params
   int64_t read_timelast; // 上一次读取的时间，主要用于音视频同步(微秒)
@@ -87,17 +88,28 @@ typedef struct {
   char url[PATH_MAX]; // 要播放的路径
 
   // recoder used for recording
-  void* recorder;
+  void *recorder;
 
 } Player;
 
+// 毫秒单位转化
 const int FF_TIME_MS = 1000;
 
+// 毫秒频率
 const AVRational FF_FREQUENCY_Q = {FF_TIME_MS, 1};
 
+// 毫秒时间间隔
 const AVRational FF_TIME_BASE_Q = {1, FF_TIME_MS};
 
-static void avlog_callback(void* ptr, int level, const char* fmt, va_list vl) {
+/**
+ * @brief 设置log的回调函数，主要给android调试传参数
+ * @param ptr: log的上下文
+ * @param level: 日志级别
+ * @param fmt: 日志格式
+ * @param vl: 日志参数
+ * @return 空
+ */
+static void avlog_callback(void *ptr, int level, const char *fmt, va_list vl) {
   DO_USE_VAR(ptr);
   if (level <= av_log_get_level()) {
 #ifdef ANDROID
@@ -111,8 +123,8 @@ static void avlog_callback(void* ptr, int level, const char* fmt, va_list vl) {
  * @return 产生错误
  * @ref https://www.cnblogs.com/shuiche/p/11983533.html
  */
-static int interrupt_callback(void* param) {
-  Player* player = (Player*)param;
+static int interrupt_callback(void *param) {
+  Player *player = (Player *)param;
   if (player->read_timeout == -1) {
     return 0;
   }
@@ -127,7 +139,7 @@ static int interrupt_callback(void* param) {
  * @param type: 指定的流的类型
  * @return 指定类型流的总数
  */
-static int get_stream_total(Player* player, enum AVMediaType type) {
+static int get_stream_total(Player *player, enum AVMediaType type) {
   int total = 0, i;
   for (i = 0; i < (int)player->avformat_context->nb_streams; i++) {
     if (player->avformat_context->streams[i]->codecpar->codec_type == type) {
@@ -143,7 +155,7 @@ static int get_stream_total(Player* player, enum AVMediaType type) {
  * @param type: 指定的流的类型
  * @return 返回除了当前的astream上外，context上面还有多少数据流
  */
-static int get_stream_current(Player* player, enum AVMediaType type) {
+static int get_stream_current(Player *player, enum AVMediaType type) {
   int idx, cur, i;
   switch (type) {
     case AVMEDIA_TYPE_AUDIO:
@@ -173,10 +185,10 @@ static int get_stream_current(Player* player, enum AVMediaType type) {
  * @param player: 播放器上下文
  * @return 空
  */
-static void vfilter_graph_init(Player* player) {
-  const AVFilter* filter_src = avfilter_get_by_name("buffer");
-  const AVFilter* filter_sink = avfilter_get_by_name("buffersink");
-  AVCodecContext* vdec_ctx = player->vcodec_context;
+static void vfilter_graph_init(Player *player) {
+  const AVFilter *filter_src = avfilter_get_by_name("buffer");
+  const AVFilter *filter_sink = avfilter_get_by_name("buffersink");
+  AVCodecContext *vdec_ctx = player->vcodec_context;
   int video_rotate_rad = player->init_params.video_rotate * M_PI / 180;
   AVFilterInOut *inputs, *outputs;
   char temp[256], fstr[256];
@@ -271,7 +283,7 @@ error_handler:
   }
 }
 
-static void vfilter_graph_input(Player* player, AVFrame* frame) {
+static void vfilter_graph_input(Player *player, AVFrame *frame) {
   int ret;
   if (player->vfilter_graph) {
     ret = av_buffersrc_add_frame(player->vfilter_src_ctx, frame);
@@ -282,13 +294,13 @@ static void vfilter_graph_input(Player* player, AVFrame* frame) {
   }
 }
 
-static int vfilter_graph_output(Player* player, AVFrame* frame) {
+static int vfilter_graph_output(Player *player, AVFrame *frame) {
   return player->vfilter_graph
              ? av_buffersrc_add_frame(player->vfilter_sink_ctx, frame)
              : 0;
 }
 
-static void vfilter_graph_free(Player* player) {
+static void vfilter_graph_free(Player *player) {
   if (!player->vfilter_graph)
     return;
   avfilter_graph_free(&player->vfilter_graph);
@@ -297,13 +309,13 @@ static void vfilter_graph_free(Player* player) {
   player->vfilter_src_ctx = NULL;
 }
 
-static int init_stream(Player* player, enum AVMediaType type, int sel) {
+static int init_stream(Player *player, enum AVMediaType type, int sel) {
   if (!player) {
     av_log(NULL, AV_LOG_WARNING, "player is null");
     return -1;
   }
 
-  const AVCodec* decoder = NULL;
+  const AVCodec *decoder = NULL;
   int idx = -1, cur = -1, i;
 
   for (i = 0; i < (int)player->avformat_context->nb_streams; i++) {
@@ -423,9 +435,9 @@ static int init_stream(Player* player, enum AVMediaType type, int sel) {
  * @param len: 字符串长度
  * @return 返回解析后的数据
  */
-static char* parse_params(const char* str, const char* key, char* val,
+static char *parse_params(const char *str, const char *key, char *val,
                           int len) {
-  char* p = (char*)strstr(str, key);
+  char *p = (char *)strstr(str, key);
   int i;
   if (!p) {
     return NULL;
@@ -454,11 +466,11 @@ static char* parse_params(const char* str, const char* key, char* val,
   return val;
 }
 
-static int player_prepare_or_free(Player* player, int prepare) {
-  char* url = player->url;
-  AVInputFormat* fmt = NULL;
+static int player_prepare_or_free(Player *player, int prepare) {
+  char *url = player->url;
+  AVInputFormat *fmt = NULL;
 
-  AVDictionary* opts = NULL;
+  AVDictionary *opts = NULL;
   int ret = -1;
 
   if (player->acodec_context) {
@@ -607,7 +619,8 @@ static int player_prepare_or_free(Player* player, int prepare) {
   player->init_params.video_stream_totol =
       get_stream_total(player, AVMEDIA_TYPE_VIDEO);
   player->init_params.audio_channels =
-      player->acodec_context ? av_get_channel_layout_nb_channels(player->acodec_context->channel_layout)
+      player->acodec_context ? av_get_channel_layout_nb_channels(
+                                   player->acodec_context->channel_layout)
                              : -1;
   player->init_params.audio_sample_rate =
       player->acodec_context ? player->acodec_context->sample_rate : -1;
@@ -627,7 +640,7 @@ done:
   return ret;
 }
 
-static int handle_fseek_or_reconnect(Player* player) {
+static int handle_fseek_or_reconnect(Player *player) {
   int pause_req = 0, pause_ack = 0, ret = 0;
 
   if (player->avformat_context &&
@@ -687,8 +700,8 @@ static int handle_fseek_or_reconnect(Player* player) {
   return ret;
 }
 
-void* player_open(char* file, void* win, PlayerInitParams* params) {
-  Player* player = (Player*)calloc(1, sizeof(Player));
+void *player_open(char *file, void *win, PlayerInitParams *params) {
+  Player *player = (Player *)calloc(1, sizeof(Player));
   if (!player) {
     return NULL;
   }
@@ -734,8 +747,8 @@ error_handler:
   return NULL;
 }
 
-void player_play(void* ctxt) {
-  Player* player = ctxt;
+void player_play(void *ctxt) {
+  Player *player = ctxt;
   if (!player || !player->avformat_context) {
     return;
   }
@@ -746,7 +759,7 @@ void player_play(void* ctxt) {
   datarate_reset(player->datarate);
 }
 
-void player_send_message(void* extra, int32_t msg, void* param) {
+void player_send_message(void *extra, int32_t msg, void *param) {
 #ifdef ANDROID
   JniPostMessage(extra, msg, param);
 #else
@@ -756,8 +769,8 @@ void player_send_message(void* extra, int32_t msg, void* param) {
 #endif
 }
 
-void player_close(void* ctxt) {
-  Player* player = (Player*)ctxt;
+void player_close(void *ctxt) {
+  Player *player = (Player *)ctxt;
   if (!player) {
     return;
   }
@@ -792,9 +805,9 @@ void player_close(void* ctxt) {
   avformat_network_deinit();
 }
 
-void* av_demux_thread_proc(void* ctxt) {
-  Player* player = (Player*)ctxt;
-  AVPacket* packet = NULL;
+void *av_demux_thread_proc(void *ctxt) {
+  Player *player = (Player *)ctxt;
+  AVPacket *packet = NULL;
   int ret = 0;
 
   if (!player) {
@@ -843,11 +856,11 @@ void* av_demux_thread_proc(void* ctxt) {
   return NULL;
 }
 
-int decoder_decode_frame(void* ctxt, void* pkt, void* frm, void* got) {
-  AVCodecContext* context = (AVCodecContext*)ctxt;
-  AVFrame* frame = (AVFrame*)frm;
-  AVPacket* packet = (AVPacket*)pkt;
-  int* got_frame = (int*)got;
+int decoder_decode_frame(void *ctxt, void *pkt, void *frm, void *got) {
+  AVCodecContext *context = (AVCodecContext *)ctxt;
+  AVFrame *frame = (AVFrame *)frm;
+  AVPacket *packet = (AVPacket *)pkt;
+  int *got_frame = (int *)got;
   int retr = 0, rets = 0;
   if (!context) {
     return -1;
@@ -887,9 +900,9 @@ int decoder_decode_frame(void* ctxt, void* pkt, void* frm, void* got) {
   return 0;
 }
 
-void* video_decode_thread_proc(void* ctxt) {
-  Player* player = (Player*)ctxt;
-  AVPacket* packet = NULL;
+void *video_decode_thread_proc(void *ctxt) {
+  Player *player = (Player *)ctxt;
+  AVPacket *packet = NULL;
   int ret, got;
   if (!player) {
     return NULL;
@@ -983,9 +996,9 @@ void* video_decode_thread_proc(void* ctxt) {
   return NULL;
 }
 
-void* audio_decode_thread_proc(void* ctxt) {
-  Player* player = (Player*)ctxt;
-  AVPacket* packet = NULL;
+void *audio_decode_thread_proc(void *ctxt) {
+  Player *player = (Player *)ctxt;
+  AVPacket *packet = NULL;
   int64_t apts;
   int ret, got;
   if (!player) {
@@ -1065,8 +1078,8 @@ void* audio_decode_thread_proc(void* ctxt) {
   return NULL;
 }
 
-void player_seek(void* hplayer, int64_t ms, int type) {
-  Player* player = (Player*)hplayer;
+void player_seek(void *hplayer, int64_t ms, int type) {
+  Player *player = (Player *)hplayer;
   if (!player) {
     return;
   }
@@ -1109,8 +1122,8 @@ void player_seek(void* hplayer, int64_t ms, int type) {
   pthread_mutex_unlock(&player->lock);
 }
 
-int player_snapshot(void* hplayer, char* file, int w, int h, int wait_time) {
-  Player* player = (Player*)hplayer;
+int player_snapshot(void *hplayer, char *file, int w, int h, int wait_time) {
+  Player *player = (Player *)hplayer;
   if (!hplayer) {
     return -1;
   }
@@ -1119,7 +1132,7 @@ int player_snapshot(void* hplayer, char* file, int w, int h, int wait_time) {
              : render_snapshot(player->render, file, w, h, wait_time);
 }
 
-void player_load_params(PlayerInitParams* params, char* str) {
+void player_load_params(PlayerInitParams *params, char *str) {
   char value[16];
   params->video_stream_cur =
       atoi(parse_params(str, "video_stream_cur", value, sizeof(value)) ? value
@@ -1177,52 +1190,52 @@ void player_load_params(PlayerInitParams* params, char* str) {
                sizeof(params->ffrdp_rx_key));
 }
 
-void player_setparam(void* hplayer, int id, void* param) {
-  Player* player = (Player*)hplayer;
+void player_setparam(void *hplayer, int id, void *param) {
+  Player *player = (Player *)hplayer;
   if (!hplayer) {
     return;
   }
   render_setparam(player->render, id, param);
 }
 
-void player_getparam(void* hplayer, int id, void* param) {
-  Player* player = (Player*)hplayer;
+void player_getparam(void *hplayer, int id, void *param) {
+  Player *player = (Player *)hplayer;
   if (!hplayer || !param) {
     return;
   }
 
   switch (id) {
     case PARAM_MEDIA_DURATION:
-      *(int64_t*)param = player->avformat_context
-                             ? av_rescale_q(player->avformat_context->duration,
-                                            AV_TIME_BASE_Q, FF_TIME_BASE_Q)
-                             : 1;
+      *(int64_t *)param = player->avformat_context
+                              ? av_rescale_q(player->avformat_context->duration,
+                                             AV_TIME_BASE_Q, FF_TIME_BASE_Q)
+                              : 1;
       break;
     case PARAM_MEDIA_POSITION:
       if ((player->status & PS_F_SEEK) || (player->status & player->seek_pos)) {
-        *(int64_t*)param = player->seek_dest - player->cmnvars.start_time;
+        *(int64_t *)param = player->seek_dest - player->cmnvars.start_time;
       } else {
         int64_t pos = 0;
         render_getparam(player->render, id, &pos);
-        *(int64_t*)param = pos == -1 ? -1 : pos - player->cmnvars.start_time;
+        *(int64_t *)param = pos == -1 ? -1 : pos - player->cmnvars.start_time;
       }
       break;
     case PARAM_VIDEO_WIDTH:
       if (!player->vcodec_context) {
-        *(int*)param = 0;
+        *(int *)param = 0;
       } else {
-        *(int*)param = player->init_params.video_owidth;
+        *(int *)param = player->init_params.video_owidth;
       }
       break;
     case PARAM_VIDEO_HEIGHT:
       if (!player->vcodec_context) {
-        *(int*)param = 0;
+        *(int *)param = 0;
       } else {
-        *(int*)param = player->init_params.video_oheight;
+        *(int *)param = player->init_params.video_oheight;
       }
       break;
     case PARAM_RENDER_GET_CONTEXT:
-      *(void**)param = player->render;
+      *(void **)param = player->render;
       break;
     case PARAM_PLAYER_INIT_PARAMS:
       memcpy(param, &player->init_params, sizeof(PlayerInitParams));
@@ -1231,7 +1244,7 @@ void player_getparam(void* hplayer, int id, void* param) {
       if (!player->datarate) {
         player->datarate = datarate_create();
       }
-      datarate_result(player->datarate, NULL, NULL, (int*)param);
+      datarate_result(player->datarate, NULL, NULL, (int *)param);
       break;
     default:
       render_getparam(player->render, id, param);

@@ -5,9 +5,10 @@
 extern "C" {
 #endif
 
-void* veffect_create(void* surface);
-void veffect_destroy(void* ctxt);
-void veffect_render(void* ctxt, int x, int y, int w, int h, int type, void* adev);
+void *veffect_create(void *surface);
+void veffect_destroy(void *ctxt);
+void veffect_render(void *ctxt, int x, int y, int w, int h, int type,
+                    void *adev);
 
 #ifdef __cplusplus
 }

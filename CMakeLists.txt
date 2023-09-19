@@ -6,10 +6,10 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_FLAGS
-    "$ENV{CXXFLAGS} -O3 -fPIC -Wall -Wno-deprecated -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
+    "$ENV{CXXFLAGS} -O3 -Wall -Wno-deprecated -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
 )
 set(CMAKE_C_FLAGS
-  "$ENV{CXXFLAGS} -O3 -fPIC -Wall -Wno-deprecated -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
+  "$ENV{CXXFLAGS} -O3 -Wall -Wno-deprecated -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
 )
 
 set(CMAKE_CXX_STANDARD 11)
@@ -32,36 +32,37 @@ foreach(target_lib ${FFMPEG_LIBS})
 )
 endforeach()
 
-set(fdk_aac_lib_path "${FDK_AAC_DIR}/lib/libfdk-aac.a")
-message(STATUS "set fdk-aac to ${fdk_aac_lib_path}")
+message(STATUS "set fdk-aac to ${FDK_AAC_DIR}/lib/libfdk-aac.a")
 add_library(fdk-aac STATIC IMPORTED)
 include_directories(${FDK_AAC_DIR}/include)
 set_target_properties(
   fdk-aac
   PROPERTIES IMPORTED_LOCATION
-  ${fdk_aac_lib_path}
+  ${FDK_AAC_DIR}/lib/libfdk-aac.a
 )
 
-set(x264_lib_path "${X264_DIR}/lib/libx264.a")
-message(STATUS "set x264 to ${x264_lib_path}")
+message(STATUS "set x264 to ${X264_DIR}/lib/libx264.a")
 add_library(x264 STATIC IMPORTED)
 include_directories(${X264_DIR}/include)
 set_target_properties(
   x264 
   PROPERTIES IMPORTED_LOCATION
-  ${x264_lib_path}
+  ${X264_DIR}/lib/libx264.a
 )
 
-target_link_libraries(${CMAKE_PROJECT_NAME} 
-  -landroid
-  -lz
-  -lcamera2ndk
-  -lmediandk
+target_link_libraries(${CMAKE_PROJECT_NAME}
   -Wl,--start-group 
   avformat avcodec avfilter avutil swresample swscale avdevice
   -Wl,--end-group
   fdk-aac
   x264
+
+  -Bstatic
+  -landroid
+  -lz
+  -lcamera2ndk
+  -lmediandk
+  -Bdynamic
 )
 
 aux_source_directory(tests TEST_SRC)
@@ -74,5 +75,10 @@ foreach(filepath ${TEST_SRC})
   get_filename_component(filename ${filepath} NAME_WLE)
   add_executable(${filename} ${filepath})
   add_dependencies(${filename} ${CMAKE_PROJECT_NAME})
-  target_link_libraries(${filename} ${CMAKE_PROJECT_NAME} dl)
+  target_link_libraries(${filename} ${CMAKE_PROJECT_NAME})
 endforeach()
+
+message(STATUS "building player-android jni ...")
+add_library(ddgplayer_jni STATIC player-android/jni/ddgplayer_jni.cc)
+include_directories(player-android/jni)
+target_link_libraries(ddgplayer_jni ddgplayer)

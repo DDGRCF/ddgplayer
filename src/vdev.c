@@ -7,7 +7,7 @@
 
 #include "ffplayer.h"
 
-static void vdev_setup_vrect(VdevCommonContext* vdev) {
+static void vdev_setup_vrect(VdevCommonContext *vdev) {
   int rw = vdev->rrect.right - vdev->rrect.left,
       rh = vdev->rrect.bottom - vdev->rrect.top, vw, vh;
 
@@ -34,12 +34,12 @@ static void vdev_setup_vrect(VdevCommonContext* vdev) {
   vdev->status |= VDEV_CLEAR; // 设置完后情况屏幕，然后重新设置
 }
 
-void* vdev_create(int type, void* surface, int bufnum, int w, int h, int ftime,
-                  CommonVars* cmnvars) {
-  VdevCommonContext* context = NULL;
+void *vdev_create(int type, void *surface, int bufnum, int w, int h, int ftime,
+                  CommonVars *cmnvars) {
+  VdevCommonContext *context = NULL;
 
 #ifdef ANDROID
-  context = (VdevCommonContext*)vdev_android_create(surface, bufnum);
+  context = (VdevCommonContext *)vdev_android_create(surface, bufnum);
   if (!context) {
     return NULL;
   }
@@ -59,8 +59,8 @@ void* vdev_create(int type, void* surface, int bufnum, int w, int h, int ftime,
   return context;
 }
 
-void vdev_destroy(void* ctxt) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
+void vdev_destroy(void *ctxt) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
   if (!context) {
     return;
   }
@@ -81,8 +81,8 @@ void vdev_destroy(void* ctxt) {
 /*
  * @brief 设置矩形框
  */
-void vdev_setrect(void* ctxt, int x, int y, int w, int h) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
+void vdev_setrect(void *ctxt, int x, int y, int w, int h) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
   w = MAX(w, 1);
   h = MAX(h, 1);
   pthread_mutex_lock(&context->mutex);
@@ -97,8 +97,8 @@ void vdev_setrect(void* ctxt, int x, int y, int w, int h) {
   }
 }
 
-void vdev_lock(void* ctxt, uint8_t* buffer[8], int linesize[8], int64_t pts) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
+void vdev_lock(void *ctxt, uint8_t *buffer[8], int linesize[8], int64_t pts) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
   if (context) {
     return;
   }
@@ -108,8 +108,8 @@ void vdev_lock(void* ctxt, uint8_t* buffer[8], int linesize[8], int64_t pts) {
   }
 }
 
-void vdev_unlock(void* ctxt) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
+void vdev_unlock(void *ctxt) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
   if (context) {
     return;
   }
@@ -119,26 +119,26 @@ void vdev_unlock(void* ctxt) {
   }
 }
 
-void vdev_setparam(void* ctxt, int id, void* param) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
+void vdev_setparam(void *ctxt, int id, void *param) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
   if (!context) {
     return;
   }
   switch (id) {
     case PARAM_VIDEO_MODE:
       pthread_mutex_lock(&context->mutex);
-      context->vw = *(int*)param;
+      context->vw = *(int *)param;
       vdev_setup_vrect(context);
       pthread_mutex_unlock(&context->mutex);
       break;
     case PARAM_PLAY_SPEED_VALUE:
       if (param) {
-        context->speed = *(int*)param;
+        context->speed = *(int *)param;
       }
       break;
     case PARAM_AVSYNC_TIME_DIFF:
       if (param) {
-        context->tickavdiff = *(int*)param;
+        context->tickavdiff = *(int *)param;
       }
       break;
     case PARAM_VDEV_SET_BBOX:
@@ -151,23 +151,23 @@ void vdev_setparam(void* ctxt, int id, void* param) {
   }
 }
 
-void vdev_getparam(void* ctxt, int id, void* param) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
+void vdev_getparam(void *ctxt, int id, void *param) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
   if (!context || !param) {
     return;
   }
   switch (id) {
     case PARAM_VIDEO_MODE:
-      *(int*)param = context->vm;
+      *(int *)param = context->vm;
       break;
     case PARAM_PLAY_SPEED_VALUE:
-      *(int*)param = context->speed;
+      *(int *)param = context->speed;
       break;
     case PARAM_AVSYNC_TIME_DIFF:
-      *(int*)param = context->tickavdiff;
+      *(int *)param = context->tickavdiff;
       break;
     case PARAM_VDEV_GET_VRECT:
-      *(Rect*)param = context->vrect;
+      *(Rect *)param = context->vrect;
       break;
   }
   if (context->getparam) {
@@ -178,8 +178,10 @@ void vdev_getparam(void* ctxt, int id, void* param) {
 /*
  * @brief 同步视频并完成
  */
-void vdev_avsync_and_complete(void* ctxt) {
-  VdevCommonContext* context = (VdevCommonContext*)ctxt;
-  if (!context) { return; }
+void vdev_avsync_and_complete(void *ctxt) {
+  VdevCommonContext *context = (VdevCommonContext *)ctxt;
+  if (!context) {
+    return;
+  }
   // TODO: 同步到音频或者同步到系统时钟上
 }

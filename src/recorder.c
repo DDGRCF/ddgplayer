@@ -2,35 +2,39 @@
 
 #include <pthread.h>
 
-typedef struct  {
+typedef struct {
   AVFormatContext *ifc;
   AVFormatContext *ofc;
   pthread_mutex_t lock;
 } Recorder;
 
-
-void* recorder_init(char* filename, AVFormatContext* ifc) {
-  Recorder* recorder;
+void *recorder_init(char *filename, AVFormatContext *ifc) {
+  Recorder *recorder;
   int ret, i;
 
-  if (!filename || !ifc) { return NULL; }
-  
-  recorder = (Recorder*)calloc(1, sizeof(Recorder));
-  if (!recorder) { return NULL; }
+  if (!filename || !ifc) {
+    return NULL;
+  }
+
+  recorder = (Recorder *)calloc(1, sizeof(Recorder));
+  if (!recorder) {
+    return NULL;
+  }
 
   recorder->ifc = ifc;
 
   // 直接可以从filename中解析
   avformat_alloc_output_context2(&recorder->ofc, NULL, NULL, filename);
   if (!recorder->ofc) {
-    av_log(NULL, AV_LOG_ERROR, "failed to deduce output format from file extension");
+    av_log(NULL, AV_LOG_ERROR,
+           "failed to deduce output format from file extension");
     goto error_handler;
   }
 
-
   for (i = 0; i < (int)ifc->nb_streams; i++) { // TODO: Test
-    AVStream* is = ifc->streams[i];
-    AVStream* os = avformat_new_stream(recorder->ofc, NULL); // 后面参数估计为了兼容用的，没有使用
+    AVStream *is = ifc->streams[i];
+    AVStream *os = avformat_new_stream(
+        recorder->ofc, NULL); // 后面参数估计为了兼容用的，没有使用
     if (!os) {
       av_log(NULL, AV_LOG_ERROR, "failed to allocating output stream !\n");
       goto error_handler;
@@ -38,7 +42,9 @@ void* recorder_init(char* filename, AVFormatContext* ifc) {
 
     ret = avcodec_parameters_copy(os->codecpar, is->codecpar);
     if (ret < 0) {
-      av_log(NULL, AV_LOG_ERROR, "failed to copy istream code parameters to ostream code parameters !\n");
+      av_log(NULL, AV_LOG_ERROR,
+             "failed to copy istream code parameters to ostream code "
+             "parameters !\n");
       goto error_handler;
     }
 
@@ -74,9 +80,11 @@ error_handler:
   return NULL;
 }
 
-void recorder_free(void* ctxt) {
-  Recorder* recorder = (Recorder*)ctxt;
-  if (!ctxt) { return; }
+void recorder_free(void *ctxt) {
+  Recorder *recorder = (Recorder *)ctxt;
+  if (!ctxt) {
+    return;
+  }
 
   pthread_mutex_lock(&recorder->lock);
 
@@ -95,12 +103,14 @@ void recorder_free(void* ctxt) {
   free(recorder);
 }
 
-int recorder_packet(void* ctxt, AVPacket* pkt) {
-  Recorder* recorder = (Recorder*)ctxt; 
+int recorder_packet(void *ctxt, AVPacket *pkt) {
+  Recorder *recorder = (Recorder *)ctxt;
   AVPacket packet = {0};
   AVStream *is, *os;
   int ret = 0;
-  if (!ctxt || !pkt) { return -1; }
+  if (!ctxt || !pkt) {
+    return -1;
+  }
 
   pthread_mutex_lock(&recorder->lock);
 
@@ -115,8 +125,10 @@ int recorder_packet(void* ctxt, AVPacket* pkt) {
   }
 
   // TODO: ?
-  packet.pts = av_rescale_q_rnd(packet.pts, is->time_base, os->time_base, AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
-  packet.dts = av_rescale_q_rnd(packet.dts, is->time_base, os->time_base, AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
+  packet.pts = av_rescale_q_rnd(packet.pts, is->time_base, os->time_base,
+                                AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
+  packet.dts = av_rescale_q_rnd(packet.dts, is->time_base, os->time_base,
+                                AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
   packet.duration = av_rescale_q(packet.duration, is->time_base, os->time_base);
   packet.pos = -1;
   ret = av_interleaved_write_frame(recorder->ofc, &packet);

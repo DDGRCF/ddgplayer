@@ -5,10 +5,8 @@
 // #include "libavformat/avformat.h"
 // }
 
-
 #include "vdev.h"
 
-
-void* vdev_android_create(void* surface, int bufnum) {
-  return (void*)0;
+void *vdev_android_create(void *surface, int bufnum) {
+  return (void *)0;
 }
