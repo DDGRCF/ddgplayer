@@ -13,7 +13,7 @@ typedef struct {
 
 #define CONFIG_ENABLE_VEFFECT    0
 #define CONFIG_ENABLE_SNAPSHOT   1
-#define CONFIG_ENABLE_SOUNDTOUCH 1
+#define CONFIG_ENABLE_SOUNDTOUCH 0 // TODO(ddgrcf): to enable soundtouch
 #define TCHAR                    cahr
 
 #endif

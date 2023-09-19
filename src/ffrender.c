@@ -13,7 +13,9 @@
 #include "veffect.h"
 
 #ifdef ANDROID
-#include "fanplayer_jni.h"
+
+#include "ddgplayer_jni.h"
+
 #endif
 
 typedef struct {
@@ -69,6 +71,10 @@ typedef struct {
 #define RENDER_DEFINITION_EVAL (1 << 4)
   int status;
   float definitionval;
+
+#if CONFIG_ENABLE_SOUNDTOUCH
+  void *stcontext;
+#endif
 
 #if CONFIG_ENALBE_VEFFECT
   void *veffect_context;
@@ -348,21 +354,21 @@ void render_setparam(void *hrender, int id, void *param) {
       render->vol_curval = vol;
     }
     case PARAM_PLAY_SPEED_VALUE:
-      render_setspeed(render, *(int*)param);
+      render_setspeed(render, *(int *)param);
       break;
     case PARAM_PLAY_SPEED_TYPE:
-      render->new_speed_type = *(int*)param;
+      render->new_speed_type = *(int *)param;
       break;
 #if CONFIG_ENABLE_VEFFECT
     case PARAM_VISUAL_EFFECT:
-      render->veffect_type = *(int*)param;
+      render->veffect_type = *(int *)param;
       if (render->veffet_type == VISUAL_EFFECT_DISABLE) {
         veffect_render(render->veffect_context, render->veffect_x,
                        render->veffect_y, render->veffect_w, render->veffect_h,
                        render->veffet_type, render->adev);
       }
 #endif
-    case PARAM_VIDEO_MODE: 
+    case PARAM_VIDEO_MODE:
     case PARAM_AVSYNC_TIME_DIFF:
     case PARAM_VDEV_POST_SURFACE:
     case PARAM_VDEV_SET_OVERLAY_RECT:
@@ -373,13 +379,15 @@ void render_setparam(void *hrender, int id, void *param) {
       break;
     case PARAM_RENDER_VDEV_WIN:
 #ifdef ANDROID
-      JniReleaseWinObj(render->surface); 
+      JniReleaseWinObj(render->surface);
       render->surface = JniRequestWinObj(param);
-      vdev_setparam(render->vdev, id, render->surface)
+      vdev_setparam(render->vdev, id, render->surface);
 #endif
       break;
     case PARAM_RENDER_SOURCE_RECT:
-      if (param) { render->new_src_rect = *(Rect*)param; }
+      if (param) {
+        render->new_src_rect = *(Rect *)param;
+      }
       if (render->new_src_rect.right == 0 && render->new_src_rect.bottom == 0) {
         render->cur_video_w = render->cur_video_h = 0;
       }

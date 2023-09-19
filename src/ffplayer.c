@@ -384,9 +384,9 @@ static int init_stream(Player *player, enum AVMediaType type, int sel) {
         }
 
         if (decoder &&
-            avcodec_parameters_copy(
+            avcodec_parameters_to_context(
                 player->vcodec_context,
-                player->avformat_context->streams[idex]->codecpar) == 0 &&
+                player->avformat_context->streams[idx]->codecpar) == 0 &&
             avcodec_open2(player->vcodec_context, decoder, NULL) == 0) {
           player->vstream_index = idx;
           av_log(NULL, AV_LOG_WARNING,
@@ -757,6 +757,10 @@ void player_play(void *ctxt) {
   pthread_mutex_unlock(&player->lock);
   render_pause(player->render, 0);
   datarate_reset(player->datarate);
+}
+
+void player_pause(void *hplayer) {
+  // TODO(ddgplayer): to finish!
 }
 
 void player_send_message(void *extra, int32_t msg, void *param) {

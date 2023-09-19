@@ -22,7 +22,7 @@ extern "C" {
   int head;                 \
   int tail;                 \
   int status;               \
-  CommonVars cmnvars
+  CommonVars *cmnvars
 
 typedef struct {
   ADEV_COMMON_MEMBERS;

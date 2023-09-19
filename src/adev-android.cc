@@ -37,15 +37,13 @@ typedef struct {
   pthread_t thread;
 
 #ifdef ANDROID
-
   jobject jobj_at;
   jmethodID jmid_at_init;
   jmethodID jmid_at_close;
   jmethodID jmid_at_play;
   jmethodID jmid_at_pause;
   jmethodID jmid_at_write;
-  jmethodID audio_buffer;
-
+  jbyteArray audio_buffer;
 #endif
 
 } AdevContext;
@@ -55,7 +53,7 @@ static void *audio_render_thread_proc(void *param) {
   JNIEnv *env = get_jni_env();
   AdevContext *context = (AdevContext *)param;
 
-  env->CallVoidMethod(context->jobj_at, context - jmid_at_play);
+  env->CallVoidMethod(context->jobj_at, context->jmid_at_play);
 
   while (!(context->status & ADEV_CLOSE)) {
     pthread_mutex_lock(&context->lock);
@@ -64,12 +62,12 @@ static void *audio_render_thread_proc(void *param) {
     }
 
     if (!(context->status & ADEV_CLOSE)) {
-      env->CallInMethod(context->jobj_at, context->jmid_at_write,
+      env->CallIntMethod(context->jobj_at, context->jmid_at_write,
                         context->audio_buffer, context->head * context->buflen,
                         context->p_wave_hdr[context->head].size); // TODO:
       context->cmnvars->apts = context->ppts[context->head];
       if (++context->head == context->bufnum) {
-        c->head = 0;
+        context->head = 0;
       }
       pthread_cond_signal(&context->cond);
     }
@@ -102,7 +100,7 @@ void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
   context->bufnum = bufnum;
   context->buflen = buflen;
   context->ppts = (int64_t *)((uint8_t *)context + sizeof(AdevContext));
-  context->p_wave_hdr = (uint8_t *)context->ppts + bufnum * sizeof(int64_t);
+  context->p_wave_hdr = (AudioBuf*)((uint8_t *)context->ppts + bufnum * sizeof(int64_t));
   context->cmnvars = cmnvars;
 
   jbyteArray local_audio_buffer = env->NewByteArray(bufnum * buflen);
@@ -164,7 +162,7 @@ void adev_destroy(void *ctxt) {
   env->ReleaseByteArrayElements(context->audio_buffer,
                                 (jbyte *)context->p_wave_buf, 0);
   env->DeleteGlobalRef(context->audio_buffer);
-  env->DeleteGlobalRef(context->jboj_at);
+  env->DeleteGlobalRef(context->jobj_at);
 
   free(context);
 #endif

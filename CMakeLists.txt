@@ -12,12 +12,20 @@ set(CMAKE_C_FLAGS
   "$ENV{CXXFLAGS} -O3 -Wall -Wno-deprecated -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations"
 )
 
+if (DEFINED ANDROID)
+  add_definitions(-DANDROID)
+endif()
+
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_STANDARD 11)
 
 include_directories(include)
 aux_source_directory(src LIB_SRC)
-add_library(${CMAKE_PROJECT_NAME} SHARED ${LIB_SRC})
+
+include_directories(player-android/jni)
+aux_source_directory(player-android/jni ANDROID_LIB_SRC)
+
+add_library(${CMAKE_PROJECT_NAME} SHARED ${LIB_SRC} ${ANDROID_LIB_SRC})
 
 set(FFMPEG_LIBS avformat avcodec avfilter avutil swresample swscale avdevice)
 include_directories(${FFMPEG_DIR}/include)
@@ -62,6 +70,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   -lz
   -lcamera2ndk
   -lmediandk
+  -llog
   -Bdynamic
 )
 
@@ -77,8 +86,3 @@ foreach(filepath ${TEST_SRC})
   add_dependencies(${filename} ${CMAKE_PROJECT_NAME})
   target_link_libraries(${filename} ${CMAKE_PROJECT_NAME})
 endforeach()
-
-message(STATUS "building player-android jni ...")
-add_library(ddgplayer_jni STATIC player-android/jni/ddgplayer_jni.cc)
-include_directories(player-android/jni)
-target_link_libraries(ddgplayer_jni ddgplayer)
