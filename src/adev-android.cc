@@ -1,14 +1,9 @@
 #include "adev.h"
 
+#include <jni.h>
 #include <pthread.h>
 
 #include "stdefine.h"
-
-#ifdef ANDROID
-
-#include <jni.h>
-
-#endif
 
 typedef struct {
   int16_t *data;
@@ -18,12 +13,8 @@ typedef struct {
 #define DEF_ADEV_BUF_NUM 3
 #define DEF_ADEV_BUF_LEN 2048
 
-#ifdef ANDROID
-
 JNIEXPORT JavaVM *get_jni_jvm(void);
 JNIEXPORT JNIEnv *get_jni_env(void);
-
-#endif
 
 typedef struct {
   ADEV_COMMON_MEMBERS;
@@ -36,7 +27,6 @@ typedef struct {
   pthread_cond_t cond;
   pthread_t thread;
 
-#ifdef ANDROID
   jobject jobj_at;
   jmethodID jmid_at_init;
   jmethodID jmid_at_close;
@@ -44,12 +34,10 @@ typedef struct {
   jmethodID jmid_at_pause;
   jmethodID jmid_at_write;
   jbyteArray audio_buffer;
-#endif
 
 } AdevContext;
 
 static void *audio_render_thread_proc(void *param) {
-#ifdef ANDROID
   JNIEnv *env = get_jni_env();
   AdevContext *context = (AdevContext *)param;
 
@@ -63,8 +51,8 @@ static void *audio_render_thread_proc(void *param) {
 
     if (!(context->status & ADEV_CLOSE)) {
       env->CallIntMethod(context->jobj_at, context->jmid_at_write,
-                        context->audio_buffer, context->head * context->buflen,
-                        context->p_wave_hdr[context->head].size); // TODO:
+                         context->audio_buffer, context->head * context->buflen,
+                         context->p_wave_hdr[context->head].size); // TODO:
       context->cmnvars->apts = context->ppts[context->head];
       if (++context->head == context->bufnum) {
         context->head = 0;
@@ -77,12 +65,10 @@ static void *audio_render_thread_proc(void *param) {
   env->CallVoidMethod(context->jobj_at, context->jmid_at_close);
 
   get_jni_jvm()->DetachCurrentThread();
-#endif
   return NULL;
 }
 
 void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
-#ifdef ANDROID
   JNIEnv *env = get_jni_env();
   AdevContext *context = NULL;
   int i;
@@ -100,7 +86,8 @@ void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
   context->bufnum = bufnum;
   context->buflen = buflen;
   context->ppts = (int64_t *)((uint8_t *)context + sizeof(AdevContext));
-  context->p_wave_hdr = (AudioBuf*)((uint8_t *)context->ppts + bufnum * sizeof(int64_t));
+  context->p_wave_hdr =
+      (AudioBuf *)((uint8_t *)context->ppts + bufnum * sizeof(int64_t));
   context->cmnvars = cmnvars;
 
   jbyteArray local_audio_buffer = env->NewByteArray(bufnum * buflen);
@@ -138,13 +125,9 @@ void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
   pthread_create(&context->thread, NULL, audio_render_thread_proc, context);
 
   return context;
-
-#endif
-  return NULL;
 }
 
 void adev_destroy(void *ctxt) {
-#ifdef ANDROID
   if (!ctxt)
     return;
   JNIEnv *env = get_jni_env();
@@ -165,11 +148,9 @@ void adev_destroy(void *ctxt) {
   env->DeleteGlobalRef(context->jobj_at);
 
   free(context);
-#endif
 }
 
 void adev_write(void *ctxt, uint8_t *buf, int len, int64_t pts) {
-#ifdef ANDROID
   if (!ctxt)
     return;
   AdevContext *context = (AdevContext *)ctxt;
@@ -190,7 +171,6 @@ void adev_write(void *ctxt, uint8_t *buf, int len, int64_t pts) {
     pthread_cond_signal(&context->cond);
   }
   pthread_mutex_unlock(&context->lock);
-#endif
 }
 
 void adev_setparam(void *ctxt, int id, void *param) {}

@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#include <jni.h>
 #include <android/log.h>
+#include <jni.h>
 
 JNIEXPORT JavaVM *get_jni_jvm(void);
 JNIEXPORT JNIEnv *get_jni_env(void);

@@ -4,14 +4,32 @@
 #include <android/native_window_jni.h>
 
 #include "adev.h"
-#include "vdev.h"
 #include "ffplayer.h"
+#include "vdev.h"
 
 extern "C" int av_jni_set_java_vm(void *vm, void *log_ctx);
+
+static jstring JNICALL nativeLoadTest(JNIEnv *env, jobject obj) {
+  const char *infos =
+      "Hello From JNI! More Infos:\n"
+      "nativeOpen: the native api to open media player\n"
+      "nativeClose: the native api to close media player\n"
+      "nativePlay: the native api to play the media file\n"
+      "nativePause: the native api to pause the media file\n"
+      "nativeSeek: the native api to seek the stream position\n"
+      "nativeSetParam: the native api to set param of media player\n"
+      "nativeGetParam: the native api to get param of media player\n"
+      "nativeSetDisplaySurface: the native api to set display surface";
+  jstring javaString = env->NewStringUTF(infos);
+  return javaString;
+}
 
 static jlong JNICALL nativeOpen(JNIEnv *env, jobject obj, jstring url,
                                 jobject jsurface, jint w, jint h,
                                 jstring params) {
+  DO_USE_VAR(jsurface);
+  DO_USE_VAR(w);
+  DO_USE_VAR(h);
   PlayerInitParams playerparams;
   memset(&playerparams, 0, sizeof(playerparams));
   if (params != NULL) {
@@ -26,29 +44,41 @@ static jlong JNICALL nativeOpen(JNIEnv *env, jobject obj, jstring url,
 }
 
 static void nativeClose(JNIEnv *env, jobject obj, jlong hplayer) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   player_close((void *)hplayer);
 }
 
 static void JNICALL nativePlay(JNIEnv *env, jobject obj, jlong hplayer) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   player_play((void *)hplayer);
 }
 
 static void JNICALL nativePause(JNIEnv *env, jobject obj, jlong hplayer) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   player_pause((void *)hplayer);
 }
 
 static void JNICALL nativeSeek(JNIEnv *env, jobject obj, jlong hplayer,
                                jlong ms) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   player_seek((void *)hplayer, ms, 0); // TODO(@ddg): 探索一下里面干了什么事情
 }
 
 static void JNICALL nativeSetParam(JNIEnv *env, jobject obj, jlong hplayer,
                                    jint id, jlong value) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   player_setparam((void *)hplayer, id, &value);
 }
 
 static jlong JNICALL nativeGetParam(JNIEnv *env, jobject obj, jlong hplayer,
                                     jint id) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   jlong value = 0;
   player_getparam((void *)hplayer, id, &value);
   return value;
@@ -56,14 +86,17 @@ static jlong JNICALL nativeGetParam(JNIEnv *env, jobject obj, jlong hplayer,
 
 static void JNICALL nativeSetDisplaySurface(JNIEnv *env, jobject obj,
                                             jlong hplayer, jobject surface) {
+  DO_USE_VAR(env);
+  DO_USE_VAR(obj);
   player_setparam((void *)hplayer, PARAM_RENDER_VDEV_WIN, surface);
 }
 
 static JavaVM *g_jvm = NULL;
 
 static const JNINativeMethod g_methods[] = {
+    {"nativeLoadTest", "()Ljava/lang/String;", (void *)nativeLoadTest},
     {"nativeOpen",
-     "(Ljava/lang/String;Ljava/lang/Object;IILJava/lang/String;)J",
+     "(Ljava/lang/String;Ljava/lang/Object;IILjava/lang/String;)J",
      (void *)nativeOpen},
     {"nativeClose", "(J)V", (void *)nativeClose},
     {"nativePlay", "(J)V", (void *)nativePlay},
@@ -72,9 +105,12 @@ static const JNINativeMethod g_methods[] = {
     {"nativeSetParam", "(JIJ)V", (void *)nativeSetParam},
     {"nativeGetParam", "(JI)J", (void *)nativeGetParam},
     {"nativeSetDisplaySurface", "(JLjava/lang/Object;)V",
-     (void *)nativeSetDisplaySurface}};
+     (void *)nativeSetDisplaySurface},
+};
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
+  DO_USE_VAR(reserved);
+
   JNIEnv *env = NULL;
   if (vm->GetEnv((void **)&env, JNI_VERSION_1_4) != JNI_OK || !env) {
     __android_log_print(ANDROID_LOG_ERROR, "ddgplayer_jni",
@@ -142,6 +178,6 @@ void JniPostMessage(void *extra, int32_t msg, void *param) {
   JNIEnv *env = get_jni_env();
   jobject obj = (jobject)extra;
   jmethodID mid = env->GetMethodID(env->GetObjectClass(obj),
-                                   "internalPlayerEventCallack", "(IJ)V");
+                                   "internalPlayerEventCallback", "(IJ)V");
   env->CallVoidMethod(obj, mid, msg, (unsigned long)param);
 }

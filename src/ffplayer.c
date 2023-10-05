@@ -760,7 +760,13 @@ void player_play(void *ctxt) {
 }
 
 void player_pause(void *hplayer) {
-  // TODO(ddgplayer): to finish!
+  Player *player = (Player *)hplayer;
+  if (!player) { return; }
+  pthread_mutex_lock(&player->lock);
+  player->status |= PS_R_PAUSE;
+  pthread_mutex_unlock(&player->lock);
+  render_pause(player->render, 1);
+  datarate_reset(player->datarate);
 }
 
 void player_send_message(void *extra, int32_t msg, void *param) {

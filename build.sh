@@ -17,7 +17,8 @@ FFMPEG_DIR=/home/r/Scripts/C++/android_ffmpeg/ffmpeg-4.4.4/android/$ANDROID_CPU
 FDK_AAC_DIR=/home/r/Scripts/C++/android_ffmpeg/fdk-aac-2.0.2/android/$LIB_TARGET_ABI
 X264_DIR=/home/r/Scripts/C++/android_ffmpeg/x264/android/$LIB_TARGET_ABI
 
-mkdir -p build && cd build && rm -rf *
+
+mkdir -p build && cd build && make clean && rm -rf *
 
 cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
       -DFFMPEG_DIR=$FFMPEG_DIR \

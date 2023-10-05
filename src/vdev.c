@@ -78,7 +78,7 @@ void vdev_destroy(void *ctxt) {
   }
 }
 
-/*
+/**
  * @brief 设置矩形框
  */
 void vdev_setrect(void *ctxt, int x, int y, int w, int h) {
@@ -175,8 +175,9 @@ void vdev_getparam(void *ctxt, int id, void *param) {
   }
 }
 
-/*
- * @brief 同步视频并完成
+/**
+ * @brief 同步视频并完成，这里同步的核心，也是代码的核心
+ * @param ctxt VdevCommonContext 上下文变量
  */
 void vdev_avsync_and_complete(void *ctxt) {
   VdevCommonContext *context = (VdevCommonContext *)ctxt;
