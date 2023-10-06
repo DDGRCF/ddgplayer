@@ -52,9 +52,10 @@ static void *audio_render_thread_proc(void *param) {
     if (!(context->status & ADEV_CLOSE)) {
       env->CallIntMethod(context->jobj_at, context->jmid_at_write,
                          context->audio_buffer, context->head * context->buflen,
-                         context->p_wave_hdr[context->head].size); // TODO:
-      context->cmnvars->apts = context->ppts[context->head];
-      if (++context->head == context->bufnum) {
+                         context->p_wave_hdr[context->head].size); // 将数据写入播放
+      context->curnum--; context->bufcur = context->p_wave_hdr[context->head].data; 
+      context->cmnvars->apts = context->ppts[context->head]; // 播放万后赋值时间戳
+      if (++context->head == context->bufnum) { // 循环队列
         context->head = 0;
       }
       pthread_cond_signal(&context->cond);
@@ -74,8 +75,8 @@ void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
   int i;
 
   DO_USE_VAR(type);
-  bufnum = bufnum ? bufnum : DEF_ADEV_BUF_NUM;
-  buflen = buflen ? buflen : DEF_ADEV_BUF_LEN;
+  bufnum = bufnum ? bufnum : DEF_ADEV_BUF_NUM; // 3
+  buflen = buflen ? buflen : DEF_ADEV_BUF_LEN; // 2028
 
   context =
       (AdevContext *)calloc(1, sizeof(AdevContext) + bufnum * sizeof(int64_t) +
@@ -94,13 +95,14 @@ void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
   context->audio_buffer = (jbyteArray)env->NewGlobalRef(local_audio_buffer);
   context->p_wave_buf =
       (uint8_t *)env->GetByteArrayElements(context->audio_buffer, 0);
-  env->DeleteLocalRef(local_audio_buffer); // 也就是将生命周期权权交给jvm
+  env->DeleteLocalRef(local_audio_buffer); // 也就是将生命周期权交给jvm
 
   for (i = 0; i < bufnum; i++) {
-    context->p_wave_hdr[i].data = (int16_t *)(context->p_wave_buf + i * buflen);
+    context->p_wave_hdr[i].data = (int16_t *)(context->p_wave_buf + i * buflen); // 16字节
     context->p_wave_hdr[i].size = buflen;
   }
 
+  // 这是Android平台用于音频播放的一个类
   jclass jcls = env->FindClass("android/media/AudioTrack");
   context->jmid_at_init = env->GetMethodID(jcls, "<init>", "(IIIIII)V");
   context->jmid_at_close = env->GetMethodID(jcls, "release", "()V");
@@ -113,11 +115,17 @@ void *adev_create(int type, int bufnum, int buflen, CommonVars *cmnvars) {
 #define CHANNEL_STEREO     3
 #define MODE_STREAM        1
 
+  // 调用init函数进行初始化
   jobject at_obj = env->NewObject(
       jcls, context->jmid_at_init, STREAM_MUSIC, ADEV_SAMPLE_RATE,
       CHANNEL_STEREO, ENCODING_PCM_16BIT, context->buflen * 2, MODE_STREAM);
-  context->jobj_at = env->NewGlobalRef(at_obj);
-  env->DeleteLocalRef(at_obj);
+#undef STREAM_MUSIC
+#undef ENCODING_PCM_16BIT
+#undef CHANNEL_STEREO
+#undef MODE_STREAM
+
+  context->jobj_at = env->NewGlobalRef(at_obj); // 创建全局的对象的引用
+  env->DeleteLocalRef(at_obj); // 删除局部对象的引用
 
   pthread_mutex_init(&context->lock, NULL);
   pthread_cond_init(&context->cond, NULL);
@@ -150,6 +158,9 @@ void adev_destroy(void *ctxt) {
   free(context);
 }
 
+/**
+  * @brief 写入数据，并通知渲染线程进行渲染
+  */
 void adev_write(void *ctxt, uint8_t *buf, int len, int64_t pts) {
   if (!ctxt)
     return;

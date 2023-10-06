@@ -27,7 +27,7 @@ static void vdev_setup_vrect(VdevCommonContext *vdev) {
 
   vdev->vrect.left =
       (rw - vw) / 2 +
-      vdev->rrect.left; // 黑边取对半，TODO：测试后面的加法是否有效
+      vdev->rrect.left; // 黑边取对半，TODO(ddgrcf)：测试后面的加法是否有效
   vdev->vrect.top = (rh - vh) / 2 + vdev->rrect.top; // 黑边取对半
   vdev->vrect.right = vdev->vrect.left + vw;
   vdev->vrect.bottom = vdev->vrect.top + vh;
@@ -43,7 +43,7 @@ void *vdev_create(int type, void *surface, int bufnum, int w, int h, int ftime,
   if (!context) {
     return NULL;
   }
-  context->tickavdiff = -ftime * 2; // TODO: 为什么要这样做
+  context->tickavdiff = -ftime * 2; // TODO(ddgrcf): 2 * frame time 
 #endif
   context->vw = MAX(w, 1);
   context->vh = MAX(h, 1);
@@ -52,9 +52,9 @@ void *vdev_create(int type, void *surface, int bufnum, int w, int h, int ftime,
   context->vrect.right = MAX(w, 1);
   context->vrect.bottom = MAX(h, 1);
 
-  context->speed = 100; // TODO: 速度是什么类型
-  context->tickframe = ftime;
-  context->ticksleep = ftime;
+  context->speed = 100;
+  context->tickframe = ftime; // a ftime
+  context->ticksleep = ftime; // a ftime
   context->cmnvars = cmnvars;
   return context;
 }
@@ -93,7 +93,7 @@ void vdev_setrect(void *ctxt, int x, int y, int w, int h) {
   vdev_setup_vrect(context);
   pthread_mutex_unlock(&context->mutex);
   if (context->setrect) {
-    context->setrect(context, x, y, w, h);
+    context->setrect(context, x, y, w, h); // TODO(ddgrcf): do nothing
   }
 }
 

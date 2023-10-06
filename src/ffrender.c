@@ -144,7 +144,103 @@ static void render_setspeed(Render *render, int speed) {
 }
 
 static int render_audio_swresample(Render *render, AVFrame *audio) {
-  return 0;
+  int num_sample;
+
+  // out是输出的buf，而out_n是输出的样本数，输入的样本数据，单通道数量
+  num_sample =
+      swr_convert(render->swr_context, (uint8_t **)&render->adev_buf_cur,
+                  render->adev_buf_avail / 4,
+                  (const uint8_t **)audio->extended_data, audio->nb_samples);
+  audio->extended_data = NULL;
+  audio->nb_samples = 0;
+  render->adev_buf_avail -= num_sample * 4;
+  render->adev_buf_cur += num_sample * 4;
+
+  if (render->adev_buf_avail == 0) {
+#if CONFIG_ENABLE_VEFFECT
+    if (render->veffect_type != VISUAL_EFFECT_DISABLE) {
+      veffect_render(render->veffect_context, render->veffect_x,
+                     render->veffect_y, render->veffect_w, render->veffect_h,
+                     render->veffect_type, render->adev);
+    }
+#endif
+    swvol_scalar_run((int16_t *)render->adev_buf_data,
+                     render->adev_buf_size / sizeof(int16_t),
+                     render->vol_scalar[render->vol_curval]);
+    audio->pts +=
+        5 * render->cur_speed_value * render->adev_buf_size /
+        (2 * ADEV_SAMPLE_RATE); // 播放前把时间戳计算好 TODO(ddgrcf): 计算方式
+    adev_write(render->adev, render->adev_buf_data, render->adev_buf_size,
+               audio->pts);
+    render->adev_buf_avail = render->adev_buf_size;
+    render->adev_buf_cur = render->adev_buf_data;
+  }
+  return num_sample;
+}
+
+/**
+  * @brief 锐度评估函数
+  */
+static float definition_evaluation(uint8_t *img, int w, int h, int stride) {
+  uint8_t *cur, *pre, *nxt;
+  int i, j, l;
+  int64_t s = 0;
+
+  if (!img || !w || !h || !stride)
+    return 0;
+  pre = img + 1;
+  cur = img + 1 + stride * 1;
+  nxt = img + 1 + stride * 2;
+
+  for (i = 1; i < h - 1; i++) {
+    for (j = 1; j < w - 1; j++) {
+      l = 1 * pre[-1] + 4 * pre[0] + 1 * pre[1];
+      l += 4 * cur[-1] - 20 * cur[0] + 4 * cur[1];
+      l += 1 * nxt[-1] + 4 * nxt[0] + 1 * nxt[1];
+      s += abs(l);
+      pre++;
+      cur++;
+      nxt++;
+    }
+    pre += stride - (w - 2);
+    cur += stride - (w - 2);
+    nxt += stride - (w - 2);
+  }
+  return (float)s / ((w - 2) * (h - 2));
+}
+
+static void render_setup_srcrect(Render *render, AVFrame *video,
+                                 AVFrame *srcpic) {
+  srcpic->pts = video->pts;
+  srcpic->format = video->format;
+  srcpic->width = render->cur_src_rect.right - render->cur_src_rect.left;
+  srcpic->height = render->cur_src_rect.bottom - render->cur_src_rect.top;
+  memcpy(srcpic->data, video->data, sizeof(srcpic->data));
+  memcpy(srcpic->linesize, video->linesize, sizeof(srcpic->linesize));
+  switch (video->format) {
+    case AV_PIX_FMT_YUV420P:
+      srcpic->data[0] += render->cur_src_rect.top * video->linesize[0] +
+                         render->cur_src_rect.left;
+      srcpic->data[1] += (render->cur_src_rect.top / 2) * video->linesize[1] +
+                         (render->cur_src_rect.left / 2);
+      srcpic->data[2] += (render->cur_src_rect.top / 2) * video->linesize[2] +
+                         (render->cur_src_rect.left / 2);
+      break;
+    case AV_PIX_FMT_NV21:
+    case AV_PIX_FMT_NV12:
+      srcpic->data[0] += render->cur_src_rect.top * video->linesize[0] +
+                         render->cur_src_rect.left;
+      srcpic->data[1] += (render->cur_src_rect.top / 2) * video->linesize[1] +
+                         (render->cur_src_rect.left / 2) * 2;
+      break;
+    case AV_PIX_FMT_ARGB:
+    case AV_PIX_FMT_RGBA:
+    case AV_PIX_FMT_ABGR:
+    case AV_PIX_FMT_BGRA:
+      srcpic->data[0] += render->cur_src_rect.top * video->linesize[0] +
+                         render->cur_src_rect.left * sizeof(uint32_t);
+      break;
+  }
 }
 
 void *render_open(int adevtype, int vdevtype, void *surface,
@@ -160,7 +256,7 @@ void *render_open(int adevtype, int vdevtype, void *surface,
 
   render->adev_buf_avail = render->adev_buf_size =
       (int)((double)ADEV_SAMPLE_RATE / (h ? 60 : 46) + 0.5) *
-      4; // TODO: 为什么要这么做
+      4; // TODO: * 4 是因为立体声和16bit，也就是/4是32bit
   render->adev_buf_cur = render->adev_buf_data = malloc(render->adev_buf_size);
 
   render->adev = adev_create(adevtype, 5, render->adev_buf_size, cmnvars);
@@ -185,7 +281,7 @@ void *render_open(int adevtype, int vdevtype, void *surface,
 
   if (render->cmnvars->init_params->swscale_type == 0) {
     render->cmnvars->init_params->swscale_type = SWS_FAST_BILINEAR;
-  } // TODO: 快速双线性插值
+  } // swscale_type 设置的变化类型设置为 快速双线性插值
 
   return render;
 }
@@ -278,9 +374,109 @@ void render_audio(void *hrender, AVFrame *audio) {
   } while (sampnum && !(render->status & RENDER_CLOSE));
 }
 
-void render_video(void *hrender, AVFrame *video) {}
+void render_video(void *hrender, AVFrame *video) {
 
-void render_setrect(void *hrender, int type, int x, int y, int w, int h) {}
+  Render *render = (Render *)hrender;
+  if (!hrender)
+    return;
+
+  if (render->status & RENDER_DEFINITION_EVAL) { // TODO(ddgrcf):
+    render->definitionval = definition_evaluation(
+        video->data[0], video->width, video->height, video->linesize[0]);
+    render->status &= ~RENDER_DEFINITION_EVAL;
+  }
+
+  // 但队列里面的帧的数量大于视频缓冲区帧的数量后，就不做任何操作
+  if (render->cmnvars->init_params->avts_syncmode != AVSYNC_MODE_FILE &&
+      render->cmnvars->vpktn > render->cmnvars->init_params->video_bufpktn)
+    return;
+  do {
+    VdevCommonContext *vdev = (VdevCommonContext *)render->vdev;
+    AVFrame lockedpic = *video, srcpic, dstpic = {{0}};
+    if (render->cur_video_w != video->width ||
+        render->cur_video_h != video->height) {
+      render->cur_video_w = render->new_src_rect.right = video->width;
+      render->cur_video_h = render->new_src_rect.bottom = video->height;
+    }
+    if (memcmp(&render->cur_src_rect, &render->new_src_rect, sizeof(Rect)) !=
+        0) { // 设置展示的矩形框
+      render->cur_src_rect.left = MIN(render->new_src_rect.left, video->width);
+      render->cur_src_rect.top = MIN(render->new_src_rect.top, video->height);
+      render->cur_src_rect.right =
+          MIN(render->new_src_rect.right, video->width);
+      render->cur_src_rect.bottom =
+          MIN(render->new_src_rect.bottom, video->height);
+      render->new_src_rect = render->cur_src_rect;
+      vdev->vw = MAX(render->cur_src_rect.right - render->cur_src_rect.left, 1);
+      vdev->vh = MAX(render->cur_src_rect.bottom - render->cur_src_rect.top, 1);
+      vdev_setparam(vdev, PARAM_VIDEO_MODE, &vdev->vm);
+    }
+
+    render_setup_srcrect(render, &lockedpic,
+                         &srcpic); // 将lockedpic中的数据拷贝到srcpic中
+    vdev_lock(render->vdev, dstpic.data, dstpic.linesize,
+              srcpic.pts); // 设备加锁，防止其他线程写入，让设备被一个线程独占
+    if (dstpic.data[0] && srcpic.format != -1 && srcpic.pts != -1) {
+      if (render->sws_src_pixfmt != srcpic.format ||
+          render->sws_src_width != srcpic.width ||
+          render->sws_src_height != srcpic.height ||
+          render->sws_dst_pixfmt != vdev->pixfmt ||
+          render->sws_dst_width != dstpic.linesize[6] ||
+          render->sws_dst_height != dstpic.linesize[7]) {
+        render->sws_src_pixfmt = srcpic.format;
+        render->sws_src_width = srcpic.width;
+        render->sws_src_height = srcpic.height;
+        render->sws_dst_pixfmt = vdev->pixfmt;
+        render->sws_dst_width = dstpic.linesize[6];
+        render->sws_dst_height = dstpic.linesize[7];
+        if (render->sws_context)
+          sws_freeContext(render->sws_context);
+        render->sws_context =
+            sws_getContext(render->sws_src_width, render->sws_src_height,
+                           render->sws_src_pixfmt, render->sws_dst_width,
+                           render->sws_dst_height, render->sws_dst_pixfmt,
+                           render->cmnvars->init_params->swscale_type, 0, 0,
+                           0); // 如果尺寸不对，就开始变化
+      }
+      if (render->sws_context)
+        sws_scale(render->sws_context, (const uint8_t **)srcpic.data,
+                  srcpic.linesize, 0, render->sws_src_height, dstpic.data,
+                  dstpic.linesize); // 变化后的数据
+    }
+    vdev_unlock(render->vdev); // 设备解锁，让其他线程又可以写入
+
+#if CONFIG_ENABLE_SNAPSHOT
+    // if (render->status & RENDER_SNAPSHOT) {
+    // take_snapshot(render->snapfile, render->snapwidth, render->snapheight, &lockedpic);
+    // player_send_message(render->cmnvars->winmsg, MSG_TAKE_SNAPSHOT, 0);
+    // render->status &= ~RENDER_SNAPSHOT;
+    // }
+#endif
+  } while ((render->status & RENDER_PAUSE) &&
+           !(render->status & RENDER_STEPFORWARD)); // 快进
+
+  // clear step forward flag
+  render->status &= ~RENDER_STEPFORWARD; // TODO
+}
+
+void render_setrect(void *hrender, int type, int x, int y, int w, int h) {
+  Render *render = (Render *)hrender;
+  if (!hrender)
+    return;
+  switch (type) {
+    case 0:
+      vdev_setrect(render->vdev, x, y, w, h);
+      break;
+#if CONFIG_ENABLE_VEFFECT
+    case 1:
+      render->veffect_x = x;
+      render->veffect_y = y;
+      render->veffect_w = MAX(w, 1);
+      render->veffect_h = MAX(h, 1);
+      break;
+#endif
+  }
+}
 
 void render_pause(void *hrender, int pause) {
   Render *render = (Render *)hrender;

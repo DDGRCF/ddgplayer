@@ -329,6 +329,7 @@ static int init_stream(Player *player, enum AVMediaType type, int sel) {
 
   switch (type) {
     case AVMEDIA_TYPE_AUDIO:
+      player->astream_timebase = player->avformat_context->streams[idx]->time_base;
       player->acodec_context = avcodec_alloc_context3(NULL);
       if (!player->acodec_context) {
         av_log(NULL, AV_LOG_WARNING, "failed to alloc context for audio");
@@ -347,6 +348,7 @@ static int init_stream(Player *player, enum AVMediaType type, int sel) {
       }
       break;
     case AVMEDIA_TYPE_VIDEO:
+      player->vstream_timebase = player->avformat_context->streams[idx]->time_base;
       player->vcodec_context = avcodec_alloc_context3(NULL);
       if (!player->vcodec_context) {
         av_log(NULL, AV_LOG_WARNING, "failed to alloc context for video");
@@ -362,16 +364,16 @@ static int init_stream(Player *player, enum AVMediaType type, int sel) {
         // 查看[这里](https://trac.ffmpeg.org/wiki/HWAccelIntro)
         switch (player->vcodec_context->codec_id) {
           case AV_CODEC_ID_H264:
-            decoder = avcodec_find_encoder_by_name("h264_mediacodec");
+            decoder = avcodec_find_decoder_by_name("h264_mediacodec");
             break;
           case AV_CODEC_ID_HEVC:
-            decoder = avcodec_find_encoder_by_name("hevc_mediacodec");
+            decoder = avcodec_find_decoder_by_name("hevc_mediacodec");
             break;
           case AV_CODEC_ID_VP8:
-            decoder = avcodec_find_encoder_by_name("vp8_mediacodec");
+            decoder = avcodec_find_decoder_by_name("vp8_mediacodec");
             break;
           case AV_CODEC_ID_VP9:
-            decoder = avcodec_find_encoder_by_name("vp9_mediacodec");
+            decoder = avcodec_find_decoder_by_name("vp9_mediacodec");
             break;
           case AV_CODEC_ID_MPEG2VIDEO:
             decoder = avcodec_find_decoder_by_name("mpeg2_meidacodec");
@@ -524,12 +526,12 @@ static int player_prepare_or_free(Player *player, int prepare) {
       player->init_params.video_vheight != 0) {
     char vsize[64];
     snprintf(vsize, sizeof(vsize), "%dx%d", player->init_params.video_vwidth,
-             player->init_params.video_vheight);
+             player->init_params.video_vheight); // 这里进行video大小的设置
     av_dict_set(&opts, "video_size", vsize, 0);
   }
   if (player->init_params.video_frame_rate != 0) {
     char frate[64];
-    snprintf(frate, sizeof(frate), "%d", player->init_params.video_frame_rate);
+    snprintf(frate, sizeof(frate), "%d", player->init_params.video_frame_rate); // 这里进行video帧率的设置
     av_dict_set(&opts, "framerate", frate, 0);
   }
 
@@ -566,7 +568,7 @@ static int player_prepare_or_free(Player *player, int prepare) {
     }
   }
 
-  if (avformat_find_stream_info(player->avformat_context, NULL) < 0) {
+  if (avformat_find_stream_info(player->avformat_context, NULL) < 0) { // 填充里面的信息，要不然找不到start_time
     av_log(NULL, AV_LOG_ERROR, "failed to find stream info !\n");
     goto done;
   }
@@ -576,7 +578,7 @@ static int player_prepare_or_free(Player *player, int prepare) {
   player->vstream_index = -1;
   init_stream(player, AVMEDIA_TYPE_VIDEO, player->init_params.video_stream_cur);
   if (player->astream_index != -1) {
-    player->seek_req |= PS_A_SEEK;
+    player->seek_req |= PS_A_SEEK; // 如果不为-1，就设置为可以循迹模式
   }
   if (player->vstream_index != -1) {
     player->seek_req |= PS_V_SEEK;
@@ -585,7 +587,7 @@ static int player_prepare_or_free(Player *player, int prepare) {
   if (player->vstream_index != -1) {
     player->vfrate =
         player->avformat_context->streams[player->vstream_index]->r_frame_rate;
-    if (av_q2d(player->vfrate) > 100.f) {
+    if (av_q2d(player->vfrate) > 100.f) { // 如果帧率大于100，可能是异常原因导致，修改为20
       player->vfrate.num = 20;
       player->vfrate.den = 1;
     }
@@ -597,7 +599,7 @@ static int player_prepare_or_free(Player *player, int prepare) {
   }
 
   player->cmnvars.start_time = av_rescale_q(
-      player->avformat_context->start_time, AV_TIME_BASE_Q, FF_TIME_BASE_Q);
+      player->avformat_context->start_time, AV_TIME_BASE_Q, FF_TIME_BASE_Q); // 相对于整个文件的开始时间
   player->cmnvars.apts =
       player->astream_index != -1 ? player->cmnvars.start_time : -1;
   player->cmnvars.vpts =
@@ -674,11 +676,11 @@ static int handle_fseek_or_reconnect(Player *player) {
   if (!player->avformat_context || (player->status & PS_RECONNECT)) {
     if (ret == 0) {
       player_send_message(player->cmnvars.winmsg, MSG_STREAM_DISCONNECT,
-                          player);
+                          player); // TODO(ddgrcf): do nothing, but can be completed
     }
     ret = player_prepare_or_free(player, 1);
     if (ret == 0) {
-      player_send_message(player->cmnvars.winmsg, MSG_STREAM_CONNECTED, player);
+      player_send_message(player->cmnvars.winmsg, MSG_STREAM_CONNECTED, player); // TODO(ddgrcf): do nothing, but can be completed
     }
   } else {
     av_seek_frame(player->avformat_context, player->seek_sidx, player->seek_pos,
@@ -715,7 +717,8 @@ void *player_open(char *file, void *win, PlayerInitParams *params) {
   av_log_set_callback(avlog_callback);
 
   pthread_mutex_init(&player->lock, NULL);
-  player->status = (PS_A_PAUSE | PS_V_PAUSE | PS_R_PAUSE); // 停止Audio Video Render
+  player->status =
+      (PS_A_PAUSE | PS_V_PAUSE | PS_R_PAUSE); // 停止Audio Video Render
 
   player->pktqueue = pktqueue_create(0, &player->cmnvars); // 创建帧队列
   if (player->pktqueue) {
@@ -724,14 +727,16 @@ void *player_open(char *file, void *win, PlayerInitParams *params) {
   }
 
   if (params) {
-    memcpy(&player->init_params, params, sizeof(PlayerInitParams)); // 设置初始化params
+    memcpy(&player->init_params, params,
+           sizeof(PlayerInitParams)); // 设置初始化params
   }
   player->cmnvars.init_params = &player->init_params;
 
   strcpy(player->url, file);
 
 #ifdef ANDROID
-  player->cmnvars.winmsg = JniRequestWinObj(win); // 请求窗口数据，对于NULL不做任何事
+  player->cmnvars.winmsg =
+      JniRequestWinObj(win); // 请求窗口数据，对于NULL不做任何事
 #endif
 
   pthread_create(&player->avdemux_thread, NULL, av_demux_thread_proc, player);
@@ -762,7 +767,9 @@ void player_play(void *ctxt) {
 
 void player_pause(void *hplayer) {
   Player *player = (Player *)hplayer;
-  if (!player) { return; }
+  if (!player) {
+    return;
+  }
   pthread_mutex_lock(&player->lock);
   player->status |= PS_R_PAUSE;
   pthread_mutex_unlock(&player->lock);
@@ -832,8 +839,11 @@ void *av_demux_thread_proc(void *ctxt) {
 
   while (!(player->status & PS_CLOSE)) {
     if (handle_fseek_or_reconnect(player) != 0) {
-      if (!player->init_params.auto_reconnect) { break; }
-      av_usleep(20 * FF_TIME_MS); continue;
+      if (!player->init_params.auto_reconnect) {
+        break;
+      }
+      av_usleep(20 * FF_TIME_MS);
+      continue;
     }
     if ((packet = pktqueue_request_packet(player->pktqueue)) == NULL) {
       continue;
@@ -1026,7 +1036,7 @@ void *audio_decode_thread_proc(void *ctxt) {
   }
 
   while (!(player->status & PS_CLOSE)) { // 是否已经关闭
-    if (player->status & PS_A_PAUSE) { // 如果PS_A_PAUSE就暂停时间
+    if (player->status & PS_A_PAUSE) {   // 如果PS_A_PAUSE就暂停时间
       pthread_mutex_lock(&player->lock);
       player->status |= (PS_A_PAUSE << 16); // 证明来过这里
       pthread_mutex_lock(&player->lock);
