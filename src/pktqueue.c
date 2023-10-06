@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include <time.h>
 
-// 一定要是2 ^ n 的形式
+// 一定要是2 ^ n 的形式，为了进行&能够约去
 #ifndef DEF_PKT_QUEUE_SIZE
 #define DEF_PKT_QUEUE_SIZE 256
 #endif
@@ -44,7 +44,7 @@ void* pktqueue_create(int size, CommonVars* cmnvars) {
   size = size ? size : DEF_PKT_QUEUE_SIZE;
   // 结构体长度 + 结构体里面的数组长度
   ppq = (PktQueue*)calloc(1, 
-      sizeof(PktQueue) + size * sizeof(AVPacket) + 3 * size * sizeof(AVPacket));
+      sizeof(PktQueue) + size * sizeof(AVPacket) + 3 * size * sizeof(AVPacket*));
   if (!ppq) {
     av_log(NULL, AV_LOG_ERROR, "failed to allocated pktqueue context : !\n");
     exit(-1);
@@ -133,12 +133,13 @@ AVPacket* pktqueue_request_packet(void* ctxt) {
   while (ppq->fncur == 0 && (ppq->status & TS_STOP) == 0 && ret != ETIMEDOUT) {
     ret = pthread_cond_timedwait(&ppq->cond, &ppq->lock, &ts);
   }
+
   if (ppq->fncur != 0) {
-    ppq->fncur--;
-    pkt = ppq->fpkts[ppq->fhead++ & (ppq->fsize - 1)];
-    av_packet_unref(pkt);
-    pthread_cond_signal(&ppq->cond);
-  } 
+    ppq->fncur--; // 数量减一
+    pkt = ppq->fpkts[ppq->fhead++ & (ppq->fsize - 1)]; // 取帧，使用位操作来代替fsize
+    av_packet_unref(pkt); // 保证帧都被释放
+    pthread_cond_signal(&ppq->cond); // 通知线程
+  }
 
   pthread_mutex_unlock(&ppq->lock);
   return pkt;
@@ -165,6 +166,7 @@ void pktqueue_release_packet(void* ctxt, AVPacket* pkt) {
   while (ppq->fncur == ppq->fsize && (ppq->status & TS_STOP) == 0 && ret != ETIMEDOUT) {
     ret = pthread_cond_timedwait(&ppq->cond, &ppq->lock, &ts);
   }
+
   if (ppq->fncur != ppq->fsize) {
     ppq->fncur++;
     pkt = ppq->fpkts[ppq->ftail++ & (ppq->fsize - 1)] = pkt;
@@ -206,7 +208,7 @@ AVPacket* pktqueue_audio_dequeue(void* ctxt) {
 
 #define TS_NSEC 1000000000
   // 过期时间是当前时间 + 0.01秒
-  ts.tv_nsec += TS_NSEC * 0.1;
+  ts.tv_nsec += TS_NSEC * 0.01;
   ts.tv_sec += ts.tv_nsec / TS_NSEC;
   ts.tv_nsec %= TS_NSEC;
 #undef TS_NSEC 

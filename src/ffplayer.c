@@ -54,8 +54,8 @@ typedef struct {
 #define PS_F_SEEK    (1 << 3)
 #define PS_A_SEEK    (1 << 4)
 #define PS_V_SEEK    (1 << 5)
-#define PS_RECONNECT (1 << 6)
-#define PS_CLOSE     (1 << 7)
+#define PS_RECONNECT (1 << 6) // 重连播放器
+#define PS_CLOSE     (1 << 7) // 关闭播放器
   int status;
 
   // seek
@@ -647,6 +647,7 @@ static int handle_fseek_or_reconnect(Player *player) {
       (player->status & (PS_F_SEEK | PS_RECONNECT)) == 0) {
     return 0;
   }
+
   if (player->astream_index != -1) {
     pause_req |= PS_A_PAUSE;
     pause_ack |= PS_A_PAUSE << 16;
@@ -714,23 +715,23 @@ void *player_open(char *file, void *win, PlayerInitParams *params) {
   av_log_set_callback(avlog_callback);
 
   pthread_mutex_init(&player->lock, NULL);
-  player->status = (PS_A_PAUSE | PS_V_PAUSE | PS_R_PAUSE); // 获取状态
+  player->status = (PS_A_PAUSE | PS_V_PAUSE | PS_R_PAUSE); // 停止Audio Video Render
 
-  player->pktqueue = pktqueue_create(0, &player->cmnvars);
+  player->pktqueue = pktqueue_create(0, &player->cmnvars); // 创建帧队列
   if (player->pktqueue) {
     av_log(NULL, AV_LOG_ERROR, "failed to create packet queue !\n");
     goto error_handler;
   }
 
   if (params) {
-    memcpy(&player->init_params, params, sizeof(PlayerInitParams));
+    memcpy(&player->init_params, params, sizeof(PlayerInitParams)); // 设置初始化params
   }
   player->cmnvars.init_params = &player->init_params;
 
   strcpy(player->url, file);
 
 #ifdef ANDROID
-  player->cmnvars.winmsg = JniRequestWinObj(win);
+  player->cmnvars.winmsg = JniRequestWinObj(win); // 请求窗口数据，对于NULL不做任何事
 #endif
 
   pthread_create(&player->avdemux_thread, NULL, av_demux_thread_proc, player);
@@ -753,10 +754,10 @@ void player_play(void *ctxt) {
     return;
   }
   pthread_mutex_lock(&player->lock);
-  player->status &= PS_CLOSE;
+  player->status &= PS_CLOSE; // 将除了ClOSE位意外的位都置0，然后开始运行
   pthread_mutex_unlock(&player->lock);
   render_pause(player->render, 0);
-  datarate_reset(player->datarate);
+  datarate_reset(player->datarate); // 重置码率
 }
 
 void player_pause(void *hplayer) {
@@ -815,6 +816,11 @@ void player_close(void *ctxt) {
   avformat_network_deinit();
 }
 
+/**
+  * @brief 音视频解封装
+  * @param ctxt Player 上下文
+  * @note TODO(@ddgrcf): 考虑直播问题
+  */
 void *av_demux_thread_proc(void *ctxt) {
   Player *player = (Player *)ctxt;
   AVPacket *packet = NULL;
@@ -825,6 +831,10 @@ void *av_demux_thread_proc(void *ctxt) {
   }
 
   while (!(player->status & PS_CLOSE)) {
+    if (handle_fseek_or_reconnect(player) != 0) {
+      if (!player->init_params.auto_reconnect) { break; }
+      av_usleep(20 * FF_TIME_MS); continue;
+    }
     if ((packet = pktqueue_request_packet(player->pktqueue)) == NULL) {
       continue;
     }
@@ -842,14 +852,14 @@ void *av_demux_thread_proc(void *ctxt) {
       }
       av_usleep(20 * FF_TIME_MS); // sleep 20 ms
     } else {
-      player->read_timelast = av_gettime_relative();
+      player->read_timelast = av_gettime_relative(); // 上一次读取的时间
       if (packet->stream_index == player->astream_index) {
-        recorder_packet(player->recorder, packet);
+        recorder_packet(player->recorder, packet); // 帧进行记录
         pktqueue_audio_enqueue(player->pktqueue, packet);
       }
 
       if (packet->stream_index == player->vstream_index) {
-        recorder_packet(player->recorder, packet);
+        recorder_packet(player->recorder, packet); // 帧进行记录
         pktqueue_video_enqueue(player->pktqueue, packet);
       }
 
@@ -1015,16 +1025,16 @@ void *audio_decode_thread_proc(void *ctxt) {
     return NULL;
   }
 
-  while (!(player->status & PS_CLOSE)) {
-    if (player->status & PS_A_PAUSE) {
+  while (!(player->status & PS_CLOSE)) { // 是否已经关闭
+    if (player->status & PS_A_PAUSE) { // 如果PS_A_PAUSE就暂停时间
       pthread_mutex_lock(&player->lock);
-      player->status |= (PS_A_PAUSE << 16);
+      player->status |= (PS_A_PAUSE << 16); // 证明来过这里
       pthread_mutex_lock(&player->lock);
-      av_usleep(20 * FF_TIME_MS); // 20 ms
+      av_usleep(20 * FF_TIME_MS); // sleep 20 ms
       continue;
     }
 
-    if (!(packet = pktqueue_video_dequeue(player))) {
+    if (!(packet = pktqueue_audio_dequeue(player))) {
       continue;
     }
     datarate_audio_packet(player->datarate, packet);

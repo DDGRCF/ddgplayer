@@ -46,7 +46,7 @@ void datarate_result(void *ctxt, int *arate, int *vrate, int *drate) {
                      1000000.0 / tickdiff);
     } // b/s
     datarate->tick_start +=
-        tickdiff / 2; // 这里除以2的目的是，每次都只取前一次一般的byte进行计算
+        tickdiff / 2; // 这里除以2的目的是，每次都只取前一次一半的byte进行计算
         // 这样bytes率就不是整体的，而是局部的
     datarate->audio_bytes /= 2;
     datarate->video_bytes /= 2;

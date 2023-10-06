@@ -131,7 +131,7 @@ int recorder_packet(void *ctxt, AVPacket *pkt) {
                                 AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
   packet.duration = av_rescale_q(packet.duration, is->time_base, os->time_base);
   packet.pos = -1;
-  ret = av_interleaved_write_frame(recorder->ofc, &packet);
+  ret = av_interleaved_write_frame(recorder->ofc, &packet); // output
   if (ret < 0) {
     av_log(NULL, AV_LOG_ERROR, "failed to write frame to output format !\n");
     return -1;
